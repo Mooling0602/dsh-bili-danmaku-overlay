@@ -1,5 +1,7 @@
 # Bilibili Live Danmaku Overlay
 
+English | [简体中文](README.zh.md)
+
 Shows Bilibili live-room danmaku in a floating overlay inside the DSH Web UI. The overlay stays mounted across page changes, so you can watch a room while you work.
 
 ## Features

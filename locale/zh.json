@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "B站直播弹幕浮层",
-    "description": "在 DSH Web 界面以常驻浮层实时显示 B 站直播间弹幕，任何页面都能看到。"
+    "description": "在 DSH Web 界面以常驻浮层实时显示 B 站直播间弹幕，任何页面都能看到。",
+    "detail": "README.zh.md"
   }
 }
