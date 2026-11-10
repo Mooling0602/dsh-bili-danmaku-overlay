@@ -1,0 +1,3 @@
+- insert:
+    - id: bili-danmaku-overlay
+      name: '@local/bili-danmaku-overlay'
