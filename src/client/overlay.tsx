@@ -1,11 +1,20 @@
 /**
- * The floating overlay component.
+ * The overlay container.
  *
- * ── Layout ─────────────────────────────────────────────────────────────────
+ * ── Structure ──────────────────────────────────────────────────────────────
  *
- * `shell.overlay` renders in a layer that ignores pointer events, so the card
+ * `shell.overlay` renders in a layer that ignores pointer events, so each card
  * re-enables them on itself. Without that every click passes through to the page
  * underneath and none of the controls work.
+ *
+ * This component owns no room state. Every room lives in a `RoomStore`, which
+ * holds its socket, its history merge and its reconnect state independently of
+ * what is on screen. What this file does is the lifecycle: which rooms exist, how
+ * the persisted layout maps onto them, and which of them are on screen.
+ *
+ * That split is what makes the window and the ball safe to treat as views. A
+ * window closing does not stop a room; only "stop monitoring" from the ball's
+ * menu does, which is why the two actions are separate controls.
  *
  * ── Why the reply path re-reads history ────────────────────────────────────
  *
@@ -15,228 +24,177 @@
  * the same way the initial load does.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 
 import type { CopyKey, Dictionary } from './copy.ts'
 import {
-  colorOf,
   fetchConfig,
   fetchCredential,
-  fetchHistory,
-  fetchStats,
   loadState,
   saveState,
   sendReply,
   type Credential,
-  type Item,
   type RemoteConfig,
+  type SavedRoom,
+  type SavedState,
 } from './api.ts'
-
-/** Connection state as the status dot reports it. */
-type State = 'idle' | 'connecting' | 'reconnecting' | 'live' | 'offline' | 'error'
+import { FloatingBall, DEFAULT_BALL_SIZE, MIN_BALL_SIZE, MAX_BALL_SIZE } from './ball.tsx'
+import { RoomStore, type RoomInstance, type RoomView } from './rooms.ts'
+import { DanmakuWindow } from './window.tsx'
 
 /** Props the slot injects. */
 export interface OverlayProps {
   readonly t: (key: CopyKey) => string
 }
 
-/** Longest message accepted, matching Bilibili's own limit. */
-const MAX_CHARS = 20
+/** How often to re-read the Host boot id, in milliseconds. */
+const BOOT_POLL_MS = 30_000
 
 /**
- * Fallback poll interval, used only before the Host has reported its own.
+ * Read the stored layout as a room list.
  *
- * Once `/api/history` answers, its `intervalMs` takes over: the Host runs one
- * shared poller per room and knows whether it is healthy or backing off. This
- * value exists so the first round has something sane to use.
+ * Older saves hold a single `room` and a `collapsed` flag; they are folded into
+ * the list form so an upgrade does not lose the room someone was watching.
+ *
+ * @param saved - the raw stored state.
+ * @returns the rooms to restore, without duplicates.
  */
-const DEFAULT_POLL_MS = 1_000
-
-/** Base path of the Host routes. */
-const BASE = '/bili-danmaku-overlay'
-
-/** Shared button chrome; every control in the header uses it. */
-const BUTTON: React.CSSProperties = {
-  width: 22,
-  height: 22,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 0,
-  fontSize: 13,
-  lineHeight: 1,
-  borderRadius: 6,
-  border: '1px solid transparent',
-  background: 'transparent',
-  color: 'var(--dsw-alias-label-secondary, #666)',
-  cursor: 'pointer',
+/**
+ * Normalise a stored view value.
+ *
+ * Storage is user-editable and may predate the `hidden` state, so anything
+ * unrecognised falls back to a visible window rather than losing the room.
+ *
+ * @param view - the stored value.
+ * @returns a valid view.
+ */
+function asView(view: unknown): RoomView {
+  if (view === 'hidden' || view === 'minimized' || view === 'window') return view
+  return 'window'
 }
 
-/**
- * The status dot.
- *
- * @param props - the current connection state.
- * @returns the dot.
- */
-function StatusDot(props: { readonly state: State }) {
-  const tone =
-    props.state === 'live'
-      ? 'var(--dsw-alias-state-success-primary, #22c55e)'
-      : props.state === 'connecting' || props.state === 'reconnecting'
-        ? 'var(--dsw-alias-state-warn-primary, #f59e0b)'
-        : props.state === 'error'
-          ? 'var(--dsw-alias-state-error-primary, #ef4444)'
-          : 'var(--dsw-alias-state-idle-primary, #8b8b8b)'
+function restoreRooms(saved: SavedState): SavedRoom[] {
+  const rooms: SavedRoom[] = []
+  const seen = new Set<string>()
+  const push = (entry: SavedRoom): void => {
+    const room = entry.room.trim()
+    if (room === '' || seen.has(room)) return
+    seen.add(room)
+    rooms.push({ ...entry, room })
+  }
 
-  return (
-    <span
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: 999,
-        background: tone,
-        boxShadow: props.state === 'live' ? `0 0 0 3px ${tone}33` : 'none',
-        flex: '0 0 auto',
-      }}
-    />
-  )
-}
+  if (Array.isArray(saved.rooms)) {
+    for (const entry of saved.rooms) {
+      if (typeof entry?.room !== 'string') continue
+      push({
+        room: entry.room,
+        view: asView(entry.view),
+        alias: typeof entry.alias === 'string' ? entry.alias : '',
+        liveTitle: typeof entry.liveTitle === 'string' ? entry.liveTitle : '',
+        uname: typeof entry.uname === 'string' ? entry.uname : '',
+        place: entry.place ?? null,
+      })
+    }
+  }
 
-/**
- * One danmaku row.
- *
- * @param props - the item and the localized super-chat label.
- * @returns the row.
- */
-function Row(props: { readonly item: Item; readonly superChatLabel: string }) {
-  const { item } = props
-  const color = item.kind === 'enter' ? null : colorOf(item.color)
+  // Single-window saves: adopt the room, honouring the old collapse flag.
+  if (typeof saved.room === 'string' && saved.room.trim() !== '' && saved.enabled === true) {
+    push({
+      room: saved.room,
+      view: saved.collapsed === true ? 'minimized' : 'window',
+      alias: '',
+      place: saved.place ?? null,
+    })
+  }
 
-  return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 6,
-        padding: '2px 0',
-        fontSize: 12,
-        lineHeight: 1.45,
-        wordBreak: 'break-word',
-      }}
-    >
-      {item.medal
-        ? (
-          <span
-            style={{
-              flex: '0 0 auto',
-              alignSelf: 'flex-start',
-              marginTop: 1,
-              padding: '0 4px',
-              borderRadius: 4,
-              border: '1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.3))',
-              fontSize: 10,
-              lineHeight: '15px',
-              color: 'var(--dsw-alias-label-tertiary, #999)',
-            }}
-          >
-            {item.medal.name}
-            {item.medal.level}
-          </span>
-        )
-        : null}
-      {item.kind === 'superchat'
-        ? (
-          <span
-            style={{
-              flex: '0 0 auto',
-              padding: '0 4px',
-              borderRadius: 4,
-              background: 'var(--dsw-alias-state-warn-primary, #f59e0b)',
-              color: '#fff',
-              fontSize: 10,
-              lineHeight: '15px',
-            }}
-          >
-            {props.superChatLabel} ¥{item.price ?? 0}
-          </span>
-        )
-        : null}
-      <span style={{ flex: '0 0 auto', color: 'var(--dsw-alias-label-secondary, #888)' }}>
-        {item.user}
-        {item.admin ? '：' : '：'}
-      </span>
-      <span
-        style={{
-          flex: '1 1 auto',
-          minWidth: 0,
-          color:
-            item.kind === 'enter'
-              ? 'var(--dsw-alias-label-tertiary, #999)'
-              : (color ?? 'var(--dsw-alias-label-primary, #222)'),
-        }}
-      >
-        {item.text}
-      </span>
-    </div>
-  )
+  return rooms
 }
 
 /**
  * The overlay.
  *
  * @param props - the bound translator.
- * @returns the overlay card, or the floating reopen button while hidden.
+ * @returns the room windows plus the floating ball.
  */
 export function Overlay(props: OverlayProps) {
   const { t } = props
   const saved = useRef(loadState()).current
 
-  const [room, setRoom] = useState(String(saved.room ?? ''))
-  const [draft, setDraft] = useState(String(saved.room ?? ''))
-  const [enabled, setEnabled] = useState(Boolean(saved.enabled && saved.room))
-  const [collapsed, setCollapsed] = useState(Boolean(saved.collapsed))
-  const [hidden, setHidden] = useState(false)
-  const [place, setPlace] = useState<{ x: number; y: number } | null>(saved.place ?? null)
-  const [state, setState] = useState<State>('idle')
-  const [items, setItems] = useState<Item[]>([])
-  const [notice, setNotice] = useState('')
-  const [reply, setReply] = useState('')
-  const [replyState, setReplyState] = useState<'idle' | 'sending' | 'sent'>('idle')
-  const [credential, setCredential] = useState<Credential | null>(null)
   const [config, setConfig] = useState<RemoteConfig>({
     historyLimit: 200,
     statsIntervalMs: 60_000,
     defaultRoom: '',
     autoConnect: false,
   })
-  const [generation, setGeneration] = useState(0)
-  const [online, setOnline] = useState(0)
+  const [credential, setCredential] = useState<Credential | null>(null)
+  const [ballSize] = useState<number>(clampBall(saved.ballSize))
+  const [ballPlace, setBallPlace] = useState<{ x: number; y: number } | null>(
+    saved.ballPlace ?? null,
+  )
+  const [menuOpen, setMenuOpen] = useState(false)
 
-  const listRef = useRef<HTMLDivElement | null>(null)
-  const cardRef = useRef<HTMLDivElement | null>(null)
-  const dragRef = useRef<{ dx: number; dy: number } | null>(null)
-  const pinnedBottom = useRef(true)
-  const appliedDefault = useRef(false)
+  /**
+   * The live stores, keyed by their stable local key.
+   *
+   * A ref rather than state: the stores outlive renders and are subscribed to
+   * individually, so re-rendering this component must not recreate them.
+   */
+  /**
+   * The limits the stores read.
+   *
+   * A ref, not the state value: a store is built once and keeps running across
+   * renders, so it has to read through a getter, and the ref has to exist before
+   * the first store is created or that store reads undefined.
+   */
+  const configRef = useRef(config)
+  const stores = useRef(new Map<string, RoomStore>())
+  const [order, setOrder] = useState<readonly string[]>([])
+  const restored = useRef(false)
+  const bootSeen = useRef<string>(String(saved.host ?? ''))
+  /** The ball's current position, read by `persist` without a stale closure. */
+  const placeRef = useRef<{ x: number; y: number } | null>(saved.ballPlace ?? null)
 
-  // Read the Host's limits once, then seed the room from them when the user has
-  // never chosen one, so `defaultRoom` and `autoConnect` can work together.
+  /**
+   * Learn which Host process is serving the page, and expire stale titles.
+   *
+   * The first sighting only records the id. A later difference means dsh
+   * restarted, which is exactly when a temporary title is supposed to lapse: the
+   * alias belonged to the process that made it, so every window falls back to the
+   * room's own title instead of carrying a name nobody can explain.
+   *
+   * @param boot - the id the Host reports now.
+   */
+  const adoptBoot = useCallback((boot: string): void => {
+    if (bootSeen.current === boot) return
+    const first = bootSeen.current === ''
+    bootSeen.current = boot
+    if (first) return
+    for (const store of stores.current.values()) store.setAlias('')
+  }, [])
+
+  // Read the Host's limits once, then seed the first room from them when nothing
+  // was restored, so `defaultRoom` and `autoConnect` work together.
   useEffect(() => {
     let disposed = false
     void fetchConfig().then((next) => {
       if (disposed) return
       setConfig(next)
-      if (appliedDefault.current || saved.room) return
-      appliedDefault.current = true
-      if (next.defaultRoom === '') return
-      setDraft(next.defaultRoom)
-      if (next.autoConnect) {
-        setRoom(next.defaultRoom)
-        setEnabled(true)
-      }
+      if (next.boot !== undefined) adoptBoot(next.boot)
+      // Nothing stored and nothing on screen: fall back to the configured default.
+      // The stored-rooms effect owns the restore flag, so this only fills the empty
+      // case and never competes with it.
+      if (restored.current) return
+      restored.current = true
+      if (next.defaultRoom === '' || !next.autoConnect) return
+      const store = createRoom(next.defaultRoom, { view: 'window' })
+      if (store) setOrder((current) => [...current, store.getSnapshot().key])
     })
     return () => {
       disposed = true
     }
-  }, [saved.room])
+    // `createRoom` is stable; the restore decision runs once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let disposed = false
@@ -248,305 +206,221 @@ export function Overlay(props: OverlayProps) {
     }
   }, [])
 
-  useEffect(() => {
-    saveState({ room, enabled, collapsed, place })
-  }, [room, enabled, collapsed, place])
-
   /**
-   * How often to poll, in milliseconds, as reported by the Host.
+   * Create a store for a room and connect it.
    *
-   * Kept in state because it drives a timer: the Host lowers it while healthy and
-   * raises it while backing off, and the page has to follow rather than guess.
-   * Zero means "no value yet", which the timer reads as a conservative default.
+   * @param room - the room id.
+   * @param initial - the restored view state.
+   * @returns the store, or null when this room is already monitored.
    */
-  const [pollMs, setPollMs] = useState(0)
-
-  const mergeHistory = useCallback(
-    async (isDisposed: () => boolean) => {
-      const snapshot = await fetchHistory(room)
-      if (isDisposed()) return
-      // Only write when the number actually changed: at a 100ms cadence an
-      // unconditional setState queues a render every round for no reason.
-      if (snapshot.intervalMs > 0) {
-        setPollMs((current) => (current === snapshot.intervalMs ? current : snapshot.intervalMs))
+  const createRoom = useCallback(
+    (room: string, initial?: Partial<RoomInstance>): RoomStore | null => {
+      for (const existing of stores.current.values()) {
+        if (existing.getSnapshot().room === room) return null
       }
-      if (snapshot.items.length === 0) return
-
-      const fresh = snapshot.items
-      setItems((previous) => {
-        const freshIds = new Set(fresh.map((item) => item.id))
-        // Everything the window no longer covers is older than the window, so it
-        // belongs in front; the window itself is already in chronological order.
-        //
-        // Prepending only the unseen rows instead would look fine on the first
-        // pull and then invert on the next one: B alone is unseen, so it would
-        // land in front of A even though it came after.
-        const older = previous.filter((item) => !freshIds.has(item.id))
-        const merged = [...older, ...fresh]
-        return merged.length === previous.length &&
-          merged.every((item, index) => item.id === previous[index]?.id)
-          ? previous
-          : merged.slice(-config.historyLimit)
-      })
+      // The config is read through a getter so a store always sees the current
+      // limits without being rebuilt when a setting changes.
+      const store = new RoomStore(room, () => configRef.current, initial)
+      stores.current.set(store.getSnapshot().key, store)
+      store.connect()
+      return store
     },
-    [room, config.historyLimit],
+    [],
   )
 
-  const submitReply = useCallback(async () => {
-    const text = reply.trim()
-    if (text === '' || replyState === 'sending') return
-
-    setReplyState('sending')
-    const result = await sendReply(room, text)
-    if (!result.ok) {
-      setReplyState('idle')
-      setNotice(result.error ?? t('sendFailed'))
-      return
-    }
-
-    setReply('')
-    setReplyState('sent')
-    // The socket does not echo your own message, so re-read history after a beat
-    // to render it with the real nickname instead of leaving it invisible.
-    window.setTimeout(() => {
-      void (async () => {
-        const fresh = (await fetchHistory(room)).items
-        const mine = fresh.find((item) => item.text === text)
-        if (!mine) return
-        setItems((previous) =>
-          previous.some((item) => item.id === mine.id)
-            ? previous
-            : [...previous, mine].slice(-config.historyLimit),
-        )
-      })()
-    }, 1200)
-    window.setTimeout(() => setReplyState('idle'), 1500)
-  }, [reply, replyState, room, t, config.historyLimit])
-
-  // Live stream. One effect per (room, generation): bumping the generation is what
-  // the refresh button does, and the cleanup closes the socket before the next
-  // one opens so a refresh never double-subscribes.
+  // Restore the stored rooms once. An empty restore leaves the flag unset so the
+  // config fallback can still open the default room.
   useEffect(() => {
-    if (!enabled || room === '') {
-      setState('idle')
-      return undefined
+    const entries = restoreRooms(saved)
+    if (entries.length === 0) return
+    if (restored.current) return
+    restored.current = true
+    const keys: string[] = []
+    for (const entry of entries) {
+      const store = createRoom(entry.room, {
+        view: asView(entry.view),
+        alias: entry.alias ?? '',
+        liveTitle: entry.liveTitle ?? '',
+        uname: entry.uname ?? '',
+        place: entry.place ?? null,
+      })
+      if (store) keys.push(store.getSnapshot().key)
     }
+    if (keys.length > 0) setOrder(keys)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-    let disposed = false
-    const isDisposed = () => disposed
-    setState('connecting')
-    setNotice('')
-
-    void mergeHistory(isDisposed)
-
-    // A background tab throttles EventSource delivery; on return to the
-    // foreground pull the recent window instead of waiting the gap out.
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void mergeHistory(isDisposed)
-    }
-    document.addEventListener('visibilitychange', onVisible)
-
-    const source = new window.EventSource(`${BASE}/api/events?room=${encodeURIComponent(room)}`)
-
-    const onRoom = (event: MessageEvent) => {
-      if (disposed) return
-      try {
-        const data = JSON.parse(String(event.data)) as { liveStatus?: number }
-        if (data.liveStatus !== undefined && data.liveStatus !== 1) setNotice(t('offline'))
-      } catch {
-        /* ignore malformed frames */
-      }
-    }
-
-    const onStatus = (event: MessageEvent) => {
-      if (disposed) return
-      try {
-        const data = JSON.parse(String(event.data)) as { state?: State; message?: string }
-        if (data.state) setState(data.state)
-        if (data.message) setNotice(data.message)
-      } catch {
-        /* ignore malformed frames */
-      }
-    }
-
-    const onDanmaku = (event: MessageEvent) => {
-      if (disposed) return
-      try {
-        const data = JSON.parse(String(event.data)) as Item
-        if (!data?.id) return
-        setItems((previous) => {
-          // A throttled tab replays buffered events and the same message also
-          // arrives from history, so the id check is what keeps rows unique.
-          if (previous.some((item) => item.id === data.id)) return previous
-          return [...previous, data].slice(-config.historyLimit)
-        })
-      } catch {
-        /* ignore malformed frames */
-      }
-    }
-
-    source.addEventListener('room', onRoom as EventListener)
-    source.addEventListener('status', onStatus as EventListener)
-    source.addEventListener('danmaku', onDanmaku as EventListener)
-    source.addEventListener('error', () => {
-      if (!disposed) setState('reconnecting')
-    })
-
-    return () => {
-      disposed = true
-      document.removeEventListener('visibilitychange', onVisible)
-      source.close()
-    }
-  }, [enabled, room, t, generation, mergeHistory, config.historyLimit])
-
-  // Nobody pushes the audience figure, so poll it. The interval comes from the
-  // Host config rather than the bundle.
+  // A temporary title belongs to one Host run. When the process behind the page
+  // changes, the aliases made in the old run stop applying and every window falls
+  // back to the room's own title instead of keeping a stale name forever.
   useEffect(() => {
-    if (!enabled || room === '') {
-      setOnline(0)
-      return undefined
+    const check = async (): Promise<void> => {
+      const next = await fetchConfig()
+      if (next.boot !== undefined) adoptBoot(next.boot)
     }
+    const timer = window.setInterval(() => void check(), BOOT_POLL_MS)
+    return () => window.clearInterval(timer)
+  }, [])
 
-    let disposed = false
-    const load = () => {
-      void fetchStats(room).then((count) => {
-        if (!disposed && count !== null) setOnline(count)
+  // Persist whenever the layout changes. Reads go through each store's snapshot so
+  // the saved list always matches what is on screen.
+  const persist = useCallback((nextOrder: readonly string[], nextSize: number) => {
+    const rooms: SavedRoom[] = []
+    for (const key of nextOrder) {
+      const store = stores.current.get(key)
+      if (!store) continue
+      const snapshot = store.getSnapshot()
+      rooms.push({
+        room: snapshot.room,
+        view: snapshot.view,
+        alias: snapshot.alias,
+        liveTitle: snapshot.liveTitle,
+        uname: snapshot.uname,
+        place: snapshot.place,
       })
     }
+    saveState({
+      rooms,
+      ballSize: nextSize,
+      ballPlace: placeRef.current,
+      host: bootSeen.current,
+    } satisfies SavedState)
+  }, [])
 
-    load()
-    const timer = window.setInterval(load, config.statsIntervalMs)
-    return () => {
-      disposed = true
-      window.clearInterval(timer)
+  // Rooms notify individually, so the list of keys and the per-room snapshots are
+  // joined into one value the render can map over.
+  //
+  // The cache is not an optimisation: `getSnapshot` must return a referentially
+  // stable value, and mapping over the keys builds a fresh array every call. React
+  // compares with `Object.is`, so an unstable snapshot makes it re-render forever
+  // and the whole overlay fails to mount. Storing the last value and returning it
+  // until a room actually notifies keeps the array stable between calls.
+  const cache = useRef<readonly RoomInstance[]>([])
+  const joinRooms = useCallback((): readonly RoomInstance[] => {
+    const next: RoomInstance[] = []
+    for (const key of order) {
+      const store = stores.current.get(key)
+      if (store) next.push(store.getSnapshot())
     }
-  }, [enabled, room, config.statsIntervalMs])
+    const previous = cache.current
+    const same =
+      previous.length === next.length &&
+      previous.every((room, index) => room === next[index])
+    if (same) return previous
+    cache.current = next
+    return next
+  }, [order])
 
-  // Poll history while the live socket is not delivering.
-  //
-  // The upstream socket can be refused for reasons outside our control — a
-  // throttled IP, a room at capacity, a network that blocks the comet hosts.
-  // Without this the overlay shows an empty list indefinitely, because the only
-  // history pulls used to be "on connect", "on refresh" and "tab regained focus".
-  // History reads a different endpoint over plain HTTPS, so it keeps working when
-  // the socket does not, and that is exactly the case worth covering.
-  //
-  // A recursive timeout rather than an interval: the Host reports the rate its
-  // shared poller is actually using, and a fixed interval would ignore it —
-  // either lagging a healthy poller or pounding a room that had backed off.
+  const instances = useSyncExternalStore(
+    useCallback(
+      (listener: () => void) => {
+        const unsubscribes: (() => void)[] = []
+        for (const key of order) {
+          const store = stores.current.get(key)
+          if (store) unsubscribes.push(store.subscribe(listener))
+        }
+        return () => {
+          for (const off of unsubscribes) off()
+        }
+      },
+      [order],
+    ),
+    joinRooms,
+    joinRooms,
+  )
+
+  // The room title arrives asynchronously, after the first persist. Without this
+  // the cache would stay empty until the user happened to move something, and a
+  // reload would fall back to the room number again. Comparing the joined titles
+  // keeps every danmaku from writing to storage: the signature only changes when
+  // a title or streamer name actually changed.
+  const titleSignature = instances
+    .map((room) => `${room.room}\u0000${room.liveTitle}\u0000${room.uname}`)
+    .join('\u0001')
   useEffect(() => {
-    if (!enabled || room === '') return undefined
+    persist(order, ballSize)
+  }, [titleSignature, order, ballSize, persist])
 
-    const degraded = state === 'error' || state === 'reconnecting' || state === 'connecting'
-    if (!degraded) return undefined
-
-    let disposed = false
-    let timer = 0
-
-    const tick = () => {
-      if (disposed) return
-      void mergeHistory(() => disposed).finally(() => {
-        if (disposed) return
-        // Read the newest interval each round; fall back to a conservative value
-        // before the Host has reported one.
-        timer = window.setTimeout(tick, pollMs > 0 ? pollMs : DEFAULT_POLL_MS)
+  const addRoom = useCallback(
+    (room: string) => {
+      const value = room.trim()
+      if (value === '') return
+      const store = createRoom(value, { view: 'window' })
+      if (!store) return
+      setOrder((current) => {
+        const next = [...current, store.getSnapshot().key]
+        persist(next, ballSize)
+        return next
       })
-    }
+    },
+    [createRoom, persist, ballSize],
+  )
 
-    timer = window.setTimeout(tick, pollMs > 0 ? pollMs : DEFAULT_POLL_MS)
+  const removeRoom = useCallback(
+    (key: string) => {
+      const store = stores.current.get(key)
+      if (store) {
+        store.dispose()
+        stores.current.delete(key)
+      }
+      setOrder((current) => {
+        const next = current.filter((entry) => entry !== key)
+        persist(next, ballSize)
+        return next
+      })
+    },
+    [persist, ballSize],
+  )
 
-    return () => {
-      disposed = true
-      window.clearTimeout(timer)
-    }
-  }, [enabled, room, state, mergeHistory, pollMs])
+  const setView = useCallback(
+    (key: string, view: RoomView) => {
+      const store = stores.current.get(key)
+      if (!store) return
+      store.setView(view)
+      persist(order, ballSize)
+    },
+    [order, persist, ballSize],
+  )
 
-  // Stick to the bottom unless the user has scrolled up to read something.
-  useEffect(() => {
-    const node = listRef.current
-    if (!node || !pinnedBottom.current) return
-    node.scrollTop = node.scrollHeight
-  }, [items, collapsed])
+  const renameRoom = useCallback(
+    (key: string, alias: string) => {
+      const store = stores.current.get(key)
+      if (!store) return
+      store.setAlias(alias.slice(0, 40))
+      persist(order, ballSize)
+    },
+    [order, persist, ballSize],
+  )
 
-  const onScroll = useCallback(() => {
-    const node = listRef.current
-    if (!node) return
-    pinnedBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48
+  const dragRoom = useCallback(
+    (key: string, place: { x: number; y: number }) => {
+      const store = stores.current.get(key)
+      if (!store) return
+      store.setPlace(place)
+      persist(order, ballSize)
+    },
+    [order, persist, ballSize],
+  )
+
+  const showAll = useCallback(() => {
+    for (const key of order) stores.current.get(key)?.setView('window')
+    persist(order, ballSize)
+  }, [order, persist, ballSize])
+
+  const hideAll = useCallback(() => {
+    // Folds every room into the ball, matching the menu wording ("all into the ball").
+    for (const key of order) stores.current.get(key)?.setView('hidden')
+    persist(order, ballSize)
+  }, [order, persist, ballSize])
+
+  const refreshRoom = useCallback((key: string) => {
+    const store = stores.current.get(key)
+    if (!store) return
+    store.disconnect()
+    store.connect()
   }, [])
 
-  const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('[data-no-drag]')) return
-    const rect = cardRef.current?.getBoundingClientRect()
-    if (!rect) return
-    dragRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top }
-    event.currentTarget.setPointerCapture?.(event.pointerId)
-  }, [])
-
-  const onPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current) return
-    const width = cardRef.current?.offsetWidth ?? 320
-    const height = cardRef.current?.offsetHeight ?? 60
-    setPlace({
-      x: Math.max(4, Math.min(window.innerWidth - width - 4, event.clientX - dragRef.current.dx)),
-      y: Math.max(4, Math.min(window.innerHeight - height - 4, event.clientY - dragRef.current.dy)),
-    })
-  }, [])
-
-  const onPointerUp = useCallback(() => {
-    if (!dragRef.current) return
-    dragRef.current = null
-    // Commit once, on release, instead of writing storage on every frame.
-    saveState({ room, enabled, collapsed, place })
-  }, [room, enabled, collapsed, place])
-
-  const connect = useCallback(() => {
-    const value = draft.trim()
-    if (value === '') return
-    setItems([])
-    pinnedBottom.current = true
-    setRoom(value)
-    setEnabled(true)
-  }, [draft])
-
-  const disconnect = useCallback(() => {
-    setEnabled(false)
-    setItems([])
-    setState('idle')
-    setNotice('')
-  }, [])
-
-  if (hidden) {
-    return (
-      <button
-        type="button"
-        onClick={() => setHidden(false)}
-        title={t('reopen')}
-        style={{
-          position: 'fixed',
-          right: 18,
-          bottom: 18,
-          zIndex: 60,
-          pointerEvents: 'auto',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '7px 12px',
-          borderRadius: 999,
-          border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
-          background: 'var(--dsw-alias-bg-overlay, #fff)',
-          color: 'var(--dsw-alias-label-secondary, #555)',
-          font: '12px/1.2 system-ui, -apple-system, sans-serif',
-          cursor: 'pointer',
-          boxShadow: '0 6px 20px rgba(0,0,0,.14)',
-        }}
-      >
-        <StatusDot state={state} />
-        {t('reopen')}
-      </button>
-    )
-  }
-
-  const canReply = Boolean(enabled && credential?.configured && credential.hasCsrf && room !== '')
+  const canReply = Boolean(credential?.configured && credential.hasCsrf)
   const replyReason = !credential
     ? ''
     : credential.ok === false
@@ -557,259 +431,80 @@ export function Overlay(props: OverlayProps) {
           ? t('credentialHint')
           : ''
 
-  const position = place ? { left: place.x, top: place.y } : { right: 18, bottom: 18 }
+  const sendTo = useCallback(
+    async (room: string, text: string) => {
+      const result = await sendReply(room, text)
+      if (!result.ok) return result
+      // The socket does not echo your own message, so re-read history after a beat
+      // to render it with the real nickname instead of leaving it invisible.
+      for (const store of stores.current.values()) {
+        if (store.getSnapshot().room === room) store.refreshHistory()
+      }
+      return result
+    },
+    [],
+  )
+
+  // Minimized windows that were never dragged take successive slots above the
+  // ball; the count resets per render so closing one closes its gap.
+  let slot = 0
 
   return (
-    <div
-      ref={cardRef}
-      style={{
-        position: 'fixed',
-        ...position,
-        zIndex: 60,
-        width: collapsed ? 'auto' : 320,
-        maxWidth: 'calc(100vw - 24px)',
-        pointerEvents: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRadius: 10,
-        border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))',
-        background: 'var(--dsw-alias-bg-overlay, #fff)',
-        boxShadow: '0 8px 28px rgba(0,0,0,.16)',
-        font: '12px/1.4 system-ui, -apple-system, sans-serif',
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '7px 8px 7px 10px',
-          borderBottom: collapsed ? 'none' : '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))',
-          cursor: 'grab',
-          userSelect: 'none',
-          touchAction: 'none',
+    <>
+      {/* A hidden room is folded into the ball: no window, no strip, but still live. */}
+      {instances.filter((instance) => instance.view !== 'hidden').map((instance) => (
+        <DanmakuWindow
+          key={instance.key}
+          t={t}
+          instance={instance}
+          canReply={canReply && instance.room !== ''}
+          replyReason={replyReason}
+          onSend={(text) => sendTo(instance.room, text)}
+          onClose={() => setView(instance.key, 'hidden')}
+          onMinimize={() => setView(instance.key, 'minimized')}
+          onRestore={() => setView(instance.key, 'window')}
+          onRefresh={() => refreshRoom(instance.key)}
+          onRename={(alias) => renameRoom(instance.key, alias)}
+          onDragEnd={(place) => dragRoom(instance.key, place)}
+          onScrolled={(atBottom) => {
+            stores.current.get(instance.key)?.setStickToBottom(atBottom)
+          }}
+          follow={instance.follow}
+          slot={instance.place === null && instance.view === 'minimized' ? slot++ : 0}
+          ballSize={ballSize}
+        />
+      ))}
+      <FloatingBall
+        t={t}
+        rooms={instances}
+        size={ballSize}
+        open={menuOpen}
+        onToggleMenu={() => setMenuOpen((value) => !value)}
+        onShowWindow={(key) => setView(key, 'window')}
+        onHideWindow={(key) => setView(key, 'hidden')}
+        onRemove={removeRoom}
+        onRename={renameRoom}
+        onAddRoom={addRoom}
+        onShowAll={showAll}
+        onHideAll={hideAll}
+        place={ballPlace}
+        onDragEnd={(place) => {
+          placeRef.current = place
+          setBallPlace(place)
+          persist(order, ballSize)
         }}
-      >
-        <StatusDot state={state} />
-        <span
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: 'var(--dsw-alias-label-primary, #222)',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {t('title')}
-        </span>
-        {room !== ''
-          ? (
-            <span
-              style={{
-                fontSize: 11,
-                color: 'var(--dsw-alias-label-secondary, #888)',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              #{room}
-            </span>
-          )
-          : null}
-        <span style={{ flex: '1 1 auto' }} />
-        {online > 0
-          ? (
-            <span
-              title={t('online')}
-              style={{
-                fontSize: 11,
-                color: 'var(--dsw-alias-label-secondary, #888)',
-                fontVariantNumeric: 'tabular-nums',
-                marginRight: 8,
-              }}
-            >
-              {'\u{1F465} '}
-              {online}
-            </span>
-          )
-          : null}
-        {items.length > 0
-          ? (
-            <span
-              style={{
-                fontSize: 11,
-                color: 'var(--dsw-alias-label-secondary, #888)',
-                fontVariantNumeric: 'tabular-nums',
-              }}
-            >
-              {items.length}
-            </span>
-          )
-          : null}
-        <button
-          type="button"
-          data-no-drag
-          onClick={() => {
-            if (room === '') return
-            // Bumping the generation re-runs the stream effect: reconnect and refetch.
-            setItems([])
-            setNotice('')
-            setGeneration((value) => value + 1)
-          }}
-          title={t('refresh')}
-          style={BUTTON}
-        >
-          ⟳
-        </button>
-        <button
-          type="button"
-          data-no-drag
-          onClick={() => setCollapsed((value) => !value)}
-          title={collapsed ? t('expand') : t('collapse')}
-          style={BUTTON}
-        >
-          {collapsed ? '▴' : '−'}
-        </button>
-        <button
-          type="button"
-          data-no-drag
-          onClick={() => setHidden(true)}
-          title={t('close')}
-          style={BUTTON}
-        >
-          ×
-        </button>
-      </div>
-
-      {collapsed
-        ? null
-        : (
-          <>
-            <div
-              data-no-drag
-              style={{
-                display: 'flex',
-                gap: 6,
-                padding: '8px 8px 6px',
-                borderBottom: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))',
-              }}
-            >
-              <input
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') connect()
-                }}
-                placeholder={t('roomPlaceholder')}
-                inputMode="numeric"
-                style={{
-                  flex: '1 1 auto',
-                  minWidth: 0,
-                  padding: '4px 8px',
-                  fontSize: 12,
-                  borderRadius: 7,
-                  border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
-                  background: 'var(--dsw-alias-bg-layer-2, transparent)',
-                  color: 'var(--dsw-alias-label-primary, #222)',
-                  outline: 'none',
-                }}
-              />
-              <button
-                type="button"
-                onClick={enabled ? disconnect : connect}
-                style={{
-                  ...BUTTON,
-                  width: 'auto',
-                  padding: '4px 10px',
-                  borderRadius: 7,
-                  border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
-                }}
-              >
-                {enabled ? t('disconnect') : t('connect')}
-              </button>
-            </div>
-
-            <div
-              ref={listRef}
-              onScroll={onScroll}
-              style={{
-                maxHeight: 280,
-                minHeight: 60,
-                overflowY: 'auto',
-                padding: '6px 10px',
-              }}
-            >
-              {items.length === 0
-                ? (
-                  <div
-                    style={{
-                      padding: '14px 4px',
-                      fontSize: 12,
-                      color: 'var(--dsw-alias-label-tertiary, #999)',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {notice !== '' ? notice : t('empty')}
-                  </div>
-                )
-                : items.map((item) => (
-                  <Row key={item.id} item={item} superChatLabel={t('superchat')} />
-                ))}
-            </div>
-
-            <div
-              data-no-drag
-              style={{
-                display: 'flex',
-                gap: 6,
-                padding: '6px 8px 8px',
-                borderTop: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))',
-              }}
-            >
-              <input
-                value={reply}
-                onChange={(event) => setReply(event.target.value.slice(0, MAX_CHARS))}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') void submitReply()
-                }}
-                placeholder={canReply ? t('sendPlaceholder') : (replyReason || t('sendPlaceholder'))}
-                maxLength={MAX_CHARS}
-                disabled={!canReply}
-                style={{
-                  flex: '1 1 auto',
-                  minWidth: 0,
-                  padding: '4px 8px',
-                  fontSize: 12,
-                  borderRadius: 7,
-                  border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
-                  background: 'var(--dsw-alias-bg-layer-2, transparent)',
-                  color: 'var(--dsw-alias-label-primary, #222)',
-                  outline: 'none',
-                  opacity: canReply ? 1 : 0.6,
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => void submitReply()}
-                disabled={!canReply || replyState === 'sending'}
-                style={{
-                  ...BUTTON,
-                  width: 'auto',
-                  padding: '4px 10px',
-                  borderRadius: 7,
-                  border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
-                  opacity: canReply ? 1 : 0.5,
-                }}
-              >
-                {replyState === 'sending' ? t('sending') : replyState === 'sent' ? t('sent') : t('send')}
-              </button>
-            </div>
-          </>
-        )}
-    </div>
+      />
+    </>
   )
+}
+
+/**
+ * @param value - a possibly stored ball size.
+ * @returns the size, clamped into the allowed range.
+ */
+function clampBall(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_BALL_SIZE
+  return Math.min(MAX_BALL_SIZE, Math.max(MIN_BALL_SIZE, Math.round(value)))
 }
 
 /** Dictionary shape the slot expects. */

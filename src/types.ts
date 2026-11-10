@@ -86,6 +86,10 @@ export interface ResolvedRoom {
   readonly shortId: number
   /** `1` while the room is live, `2` when the stream is not running. */
   readonly liveStatus: number
+  /** The room's own title, empty when the resolver did not report one. */
+  readonly title: string
+  /** The streamer's display name, empty when unavailable. */
+  readonly uname: string
 }
 
 /** Danmaku token plus the comet host list that accepts it. */

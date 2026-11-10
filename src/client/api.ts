@@ -26,16 +26,51 @@ export interface Item {
   readonly history?: boolean
 }
 
-/** Layout choices that survive a reload. */
-export interface SavedState {
-  /** The room currently connected, if any. */
-  readonly room?: string
-  /** Whether the overlay should connect on load. */
-  readonly enabled?: boolean
-  /** Whether the body is collapsed to a title bar. */
-  readonly collapsed?: boolean
+/** One room as persistence stores it. */
+export interface SavedRoom {
+  /** The room id as the user typed it. */
+  readonly room: string
+  /** Whether a window shows it, a strip shows it, or it sits inside the ball. */
+  readonly view?: 'window' | 'minimized' | 'hidden'
+  /** A temporary title the user typed, empty to follow the room title. */
+  readonly alias?: string
+  /**
+   * The room's own title, cached so a restored window labels itself before the
+   * resolver answers. A cached title is a stale hint, never the source of truth:
+   * the next connect overwrites it.
+   */
+  readonly liveTitle?: string
+  /** The streamer's display name, cached alongside the title. */
+  readonly uname?: string
   /** Last dragged position, in viewport coordinates. */
   readonly place?: { readonly x: number; readonly y: number } | null
+}
+
+/** Layout choices that survive a reload. */
+export interface SavedState {
+  /** The room currently connected, if any. Folded into `rooms` on read. */
+  readonly room?: string
+  /** Whether the overlay should connect on load. Folded into `rooms` on read. */
+  readonly enabled?: boolean
+  /** Whether the body is collapsed to a title bar. Folded into `rooms` on read. */
+  readonly collapsed?: boolean
+  /** Last dragged position of the single-window era. */
+  readonly place?: { readonly x: number; readonly y: number } | null
+  /** Every monitored room, in display order. */
+  readonly rooms?: readonly SavedRoom[]
+  /** Ball diameter in pixels. */
+  readonly ballSize?: number
+  /** Where the ball sits, in viewport coordinates; null keeps the default corner. */
+  readonly ballPlace?: { readonly x: number; readonly y: number } | null
+  /**
+   * Identifies the Host process that wrote the state.
+   *
+   * A temporary title is meant to last until dsh restarts, so it is dropped when
+   * this differs from the running Host: the alias belongs to the session that
+   * made it, not to the room. The value only has to change between processes,
+   * which the Host's boot time does.
+   */
+  readonly host?: string
 }
 
 /** Credential availability, as reported by the Host. */
@@ -53,6 +88,8 @@ export interface RemoteConfig {
   readonly statsIntervalMs: number
   readonly defaultRoom: string
   readonly autoConnect: boolean
+  /** Identifies the Host process, so a temporary title can expire with it. */
+  readonly boot?: string
 }
 
 /**

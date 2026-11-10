@@ -2,7 +2,8 @@ node_modules/
 .cache/
 *.log
 
-# Build output is committed on purpose: the Harness loads these two files
-# directly and a fresh clone must run without a build step.
+# Build output stays tracked while the plugin installs from the GitHub source,
+# because the Harness loads these two files directly and a clone must run
+# without a build step. They leave the repository once a release exists.
 !index.js
 !client.js

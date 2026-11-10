@@ -37,6 +37,21 @@ export type CopyKey =
   | 'sendFailed'
   | 'refresh'
   | 'online'
+  | 'manage'
+  | 'rooms'
+  | 'roomCount'
+  | 'addRoom'
+  | 'showWindow'
+  | 'hideWindow'
+  | 'removeRoom'
+  | 'rename'
+  | 'renameHint'
+  | 'renameReset'
+  | 'noRooms'
+  | 'waitingNew'
+  | 'minimizeWindow'
+  | 'ungroupAll'
+  | 'closeAll'
 
 /** One complete dictionary. */
 export type Dictionary = Readonly<Record<CopyKey, string>>
@@ -58,7 +73,7 @@ export const zh: Dictionary = {
   error: '连接异常',
   idle: '未连接',
   empty: '暂无弹幕，连接直播间后实时显示。',
-  hint: '可拖动标题栏移动，点右上角 − 收起为悬浮球。',
+  hint: '可拖动标题栏移动，点右上角的最小化按钮收起为悬浮球。',
   reopen: '显示弹幕浮层',
   superchat: '醒目留言',
   enter: '进入',
@@ -72,6 +87,22 @@ export const zh: Dictionary = {
   sendFailed: '发送失败',
   refresh: '刷新弹幕',
   online: '在线人数',
+  manage: '管理直播间',
+  rooms: '正在监控弹幕的直播间',
+  /** Counted, so it carries no verb: "3 个直播间". */
+  roomCount: '个直播间',
+  addRoom: '添加',
+  showWindow: '显示窗口',
+  hideWindow: '收到悬浮窗',
+  removeRoom: '退出监控',
+  rename: '重命名',
+  renameHint: '临时标题，重启 dsh 后恢复为直播间标题',
+  renameReset: '恢复原标题',
+  noRooms: '还没有监控中的直播间',
+  waitingNew: '等待新弹幕…',
+  minimizeWindow: '最小化',
+  ungroupAll: '全部收到悬浮窗',
+  closeAll: '全部关闭',
 }
 
 /** English copy. */
@@ -91,7 +122,7 @@ export const en: Dictionary = {
   error: 'Error',
   idle: 'Idle',
   empty: 'No danmaku yet. Connect a live room to stream it here.',
-  hint: 'Drag the title bar to move; − collapses to a floating button.',
+  hint: 'Drag the title bar to move; the minimize button at the top right collapses it to a floating button.',
   reopen: 'Show danmaku overlay',
   superchat: 'Super chat',
   enter: 'entered',
@@ -105,4 +136,19 @@ export const en: Dictionary = {
   sendFailed: 'Send failed',
   refresh: 'Refresh danmaku',
   online: 'Viewers online',
+  manage: 'Manage rooms',
+  rooms: 'Monitored rooms',
+  roomCount: 'rooms',
+  addRoom: 'Add',
+  showWindow: 'Show window',
+  hideWindow: 'Put in the ball',
+  removeRoom: 'Stop monitoring',
+  rename: 'Rename',
+  renameHint: 'Temporary title; restores the room title on dsh restart',
+  renameReset: 'Use the room title',
+  noRooms: 'No rooms are being monitored',
+  waitingNew: 'Waiting for new danmaku…',
+  minimizeWindow: 'Minimize',
+  ungroupAll: 'Put all in the ball',
+  closeAll: 'Close all',
 }

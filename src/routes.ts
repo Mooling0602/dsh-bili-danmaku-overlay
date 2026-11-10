@@ -24,6 +24,15 @@ import {
 /** Path prefix every route below is mounted under. */
 export const ROUTE_PREFIX = '/bili-danmaku-overlay'
 
+/**
+ * Identifies this Host process for the page.
+ *
+ * Boot time rather than a random value: it is stable for the life of the process
+ * and changes on the next start, which is the exact lifetime a temporary room
+ * title is supposed to have.
+ */
+const BOOT_ID = `${process.pid}-${Date.now()}`
+
 /** Largest request body accepted, in bytes. */
 const MAX_BODY_BYTES = 64 * 1024
 
@@ -130,6 +139,10 @@ export async function route(
       statsIntervalMs: readNumber(config?.statsIntervalMs, DEFAULT_STATS_INTERVAL_MS),
       defaultRoom: readField(config?.defaultRoom, ''),
       autoConnect: readField(config?.autoConnect, false),
+      // Identifies this Host process. A page keeps a temporary room title while
+      // this value is unchanged and drops it when it differs, which is what makes
+      // a rename last exactly one dsh run instead of accumulating forever.
+      boot: BOOT_ID,
     })
     return
   }

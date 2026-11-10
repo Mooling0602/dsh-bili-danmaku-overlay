@@ -45,298 +45,6 @@ window.__ModuleLoader__.load({
 
       // src/client/config-page.tsx
       var import_dsh_client_ui_primitives = __require("@deepseek-ai/dsh-client-ui-primitives");
-      var import_react = __require("react");
-      var import_jsx_runtime = __require("react/jsx-runtime");
-      var FIELDS = [
-        {
-          field: "defaultRoom",
-          label: "默认直播间",
-          hint: "浮层默认打开的直播间号，留空则每次手动输入。",
-          kind: "text"
-        },
-        {
-          field: "autoConnect",
-          label: "自动连接",
-          hint: "页面加载后自动连接默认直播间。",
-          kind: "switch"
-        },
-        {
-          field: "historyLimit",
-          label: "保留条数",
-          hint: "浮层最多保留的弹幕条数。",
-          kind: "number"
-        },
-        {
-          field: "historyFetch",
-          label: "单次拉取条数",
-          hint: "连接和刷新时从历史接口拉取的条数。",
-          kind: "number"
-        },
-        {
-          field: "pollMinMs",
-          label: "轮询最快间隔",
-          hint: "历史轮询的最快间隔（毫秒）。出错时会自动退避到更慢，下限 100。",
-          kind: "number"
-        },
-        {
-          field: "statsIntervalMs",
-          label: "在线人数刷新间隔",
-          hint: "在线人数刷新间隔（毫秒）。",
-          kind: "number"
-        },
-        {
-          field: "heartbeatMs",
-          label: "弹幕服务器心跳",
-          hint: "弹幕服务器心跳间隔（毫秒）。",
-          kind: "number"
-        },
-        {
-          field: "requestTimeoutMs",
-          label: "请求超时",
-          hint: "请求 Bilibili 接口的超时时间（毫秒）。",
-          kind: "number"
-        },
-        {
-          field: "showEnterMessages",
-          label: "显示进场消息",
-          hint: "有人进入直播间时在浮层里显示一条提示。",
-          kind: "switch"
-        },
-        {
-          field: "showSuperChat",
-          label: "显示醒目留言",
-          hint: "醒目留言（Super Chat）在浮层里显示。",
-          kind: "switch"
-        }
-      ];
-      var LABELS = {
-        unavailable: "当前页面不提供配置。",
-        readOnly: "配置文件为只读，无法保存。",
-        saveFailed: "保存失败，已保留你的修改。",
-        save: "保存",
-        saving: "保存中…"
-      };
-      function SwitchField(props) {
-        const state = useFieldState(props.model, props.field);
-        const id = `bili-danmaku-switch-${props.field}`;
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: SWITCH_ROW, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: SWITCH_HEAD, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: SWITCH_LABEL, id, children: props.label }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              import_dsh_client_ui_primitives.SegmentedControl,
-              {
-                id,
-                label: props.label,
-                value: state.text === "on" ? "on" : "off",
-                options: [
-                  { value: "on", label: "显示" },
-                  { value: "off", label: "隐藏" }
-                ],
-                disabled: props.disabled,
-                onChange: (next) => props.onEdit(next === "on")
-              }
-            )
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", { style: SWITCH_HINT, children: props.hint })
-        ] });
-      }
-      function ConfigPage(props) {
-        const { view, form } = props;
-        const specs = (0, import_react.useMemo)(
-          () => FIELDS.map((field) => {
-            if (field.kind === "number") return (0, import_dsh_client_ui_primitives.settingsNumberField)(field.field);
-            if (field.kind === "switch") return settingsBooleanField(field.field);
-            return (0, import_dsh_client_ui_primitives.settingsTextField)(field.field);
-          }),
-          []
-        );
-        const model = (0, import_react.useMemo)(() => form ? new import_dsh_client_ui_primitives.SettingsFormModel(form, specs) : void 0, [form, specs]);
-        (0, import_react.useEffect)(() => () => model?.dispose(), [model]);
-        const shellStore = (0, import_react.useMemo)(() => model?.bind(() => model.shell()), [model]);
-        const shell = (0, import_react.useSyncExternalStore)(
-          shellStore?.subscribe ?? NO_SUBSCRIBE,
-          shellStore?.getSnapshot ?? readEmptyShell,
-          shellStore?.getSnapshot ?? readEmptyShell
-        );
-        const actions = (0, import_react.useMemo)(() => model?.actions(), [model]);
-        if (view === "summary") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "弹幕浮层的房间、条数与刷新频率。" });
-        if (!model || !actions) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: NOTE, children: "正在读取配置…" });
-        if (!shell.available) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: NOTE, children: LABELS.unavailable });
-        const disabled = !shell.writable || shell.saving;
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_dsh_client_ui_primitives.SettingsForm, { labels: LABELS, state: shell, onSave: actions.save, onDiscard: actions.discard, children: FIELDS.map((field) => {
-          if (field.kind === "switch") {
-            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              SwitchField,
-              {
-                field: field.field,
-                label: field.label,
-                hint: field.hint,
-                model,
-                disabled,
-                onEdit: (next) => actions.edit(field.field, next ? "on" : "off")
-              },
-              field.field
-            );
-          }
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            ValueRow,
-            {
-              field: field.field,
-              label: field.label,
-              hint: field.hint,
-              numeric: field.kind === "number",
-              model,
-              disabled,
-              onEdit: (text) => actions.edit(field.field, text),
-              onReset: () => actions.resetField(field.field)
-            },
-            field.field
-          );
-        }) });
-      }
-      function settingsBooleanField(field) {
-        return {
-          field,
-          format: (value) => value === true ? "on" : value === false ? "off" : "",
-          parse: (text) => {
-            if (text === "on") return { kind: "set", value: true };
-            if (text === "off") return { kind: "set", value: false };
-            return void 0;
-          }
-        };
-      }
-      var NO_SUBSCRIBE = () => () => {
-      };
-      var EMPTY_SHELL = Object.freeze({
-        available: false,
-        writable: false,
-        dirty: false,
-        invalid: false,
-        saving: false,
-        failed: false
-      });
-      var readEmptyShell = () => EMPTY_SHELL;
-      function useFieldState(model, field) {
-        const store = (0, import_react.useMemo)(() => model.bind(() => model.field(field)), [model, field]);
-        return (0, import_react.useSyncExternalStore)(store.subscribe, store.getSnapshot, store.getSnapshot);
-      }
-      function ValueRow(props) {
-        const state = useFieldState(props.model, props.field);
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          import_dsh_client_ui_primitives.SettingsValueField,
-          {
-            id: `bili-danmaku-${props.field}`,
-            label: props.label,
-            hint: props.hint,
-            text: state.text,
-            overridden: state.overridden,
-            invalid: state.invalid,
-            overriddenLabel: "已修改",
-            resetLabel: "重置",
-            invalidLabel: "值无效",
-            disabled: props.disabled,
-            numeric: props.numeric,
-            onEdit: props.onEdit,
-            onReset: props.onReset
-          }
-        );
-      }
-      var SWITCH_ROW = {
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        padding: "12px 0",
-        borderBottom: "0.5px solid var(--dsw-alias-border-l2)"
-      };
-      var SWITCH_HEAD = {
-        display: "flex",
-        alignItems: "center",
-        gap: 8
-      };
-      var SWITCH_LABEL = {
-        flex: 1,
-        minWidth: 0,
-        fontSize: 13,
-        fontWeight: 500,
-        lineHeight: 1.5,
-        color: "var(--dsw-alias-label-primary)"
-      };
-      var SWITCH_HINT = {
-        margin: 0,
-        fontSize: 12,
-        lineHeight: 1.5,
-        color: "var(--dsw-alias-label-tertiary)"
-      };
-      var NOTE = {
-        fontSize: 13,
-        color: "var(--dsw-alias-label-tertiary)"
-      };
-
-      // src/client/copy.ts
-      var zh = {
-        title: "直播弹幕",
-        roomPlaceholder: "直播间号",
-        connect: "连接",
-        disconnect: "断开",
-        collapse: "收起",
-        expand: "展开",
-        clear: "清空",
-        close: "关闭",
-        live: "直播中",
-        offline: "未开播",
-        connecting: "连接中",
-        reconnecting: "重连中",
-        error: "连接异常",
-        idle: "未连接",
-        empty: "暂无弹幕，连接直播间后实时显示。",
-        hint: "可拖动标题栏移动，点右上角 − 收起为悬浮球。",
-        reopen: "显示弹幕浮层",
-        superchat: "醒目留言",
-        enter: "进入",
-        sendPlaceholder: "发弹幕…",
-        send: "发送",
-        sending: "发送中",
-        sent: "已发送",
-        noCredential: "未配置登录凭据，无法发言",
-        credentialHint: "凭据缺少 bili_jct，无法发言",
-        hostNotReady: "插件后端未就绪，请重启 dsh 服务",
-        sendFailed: "发送失败",
-        refresh: "刷新弹幕",
-        online: "在线人数"
-      };
-      var en = {
-        title: "Live danmaku",
-        roomPlaceholder: "Room ID",
-        connect: "Connect",
-        disconnect: "Disconnect",
-        collapse: "Collapse",
-        expand: "Expand",
-        clear: "Clear",
-        close: "Close",
-        live: "Live",
-        offline: "Offline",
-        connecting: "Connecting",
-        reconnecting: "Reconnecting",
-        error: "Error",
-        idle: "Idle",
-        empty: "No danmaku yet. Connect a live room to stream it here.",
-        hint: "Drag the title bar to move; − collapses to a floating button.",
-        reopen: "Show danmaku overlay",
-        superchat: "Super chat",
-        enter: "entered",
-        sendPlaceholder: "Send a danmaku…",
-        send: "Send",
-        sending: "Sending",
-        sent: "Sent",
-        noCredential: "No login credential configured",
-        credentialHint: "Credential is missing bili_jct",
-        hostNotReady: "Plugin backend not ready, restart the dsh service",
-        sendFailed: "Send failed",
-        refresh: "Refresh danmaku",
-        online: "Viewers online"
-      };
-
-      // src/client/overlay.tsx
       var import_react2 = __require("react");
 
       // src/client/api.ts
@@ -421,12 +129,1706 @@ window.__ModuleLoader__.load({
         return "#" + value.toString(16).padStart(6, "0");
       }
 
-      // src/client/overlay.tsx
-      var import_jsx_runtime2 = __require("react/jsx-runtime");
-      var MAX_CHARS = 20;
+      // src/client/ball.tsx
+      var import_react = __require("react");
+
+      // src/client/icons.tsx
+      var import_jsx_runtime = __require("react/jsx-runtime");
+      var BASE2 = {
+        width: "1em",
+        height: "1em",
+        viewBox: "0 0 16 16",
+        fill: "none",
+        stroke: "currentColor",
+        // Heavier than a hairline on purpose. These render at about 13px, so a 1.75 unit
+        // stroke on a 16 unit grid lands near 1.4 device pixels once scaled down; a
+        // thinner one reads as a grey outline instead of an icon.
+        strokeWidth: 1.75,
+        strokeLinecap: "round",
+        strokeLinejoin: "round",
+        // Keeps a stroked path from being read as decoration by assistive technology.
+        "aria-hidden": true,
+        focusable: "false"
+      };
+      function CloseIcon() {
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("svg", { ...BASE2, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M4 4l8 8M12 4l-8 8" }) });
+      }
+      function MinimizeIcon() {
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("svg", { ...BASE2, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M3.5 8h9" }) });
+      }
+      function RefreshIcon() {
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { ...BASE2, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M13 8a5 5 0 1 1-1.6-3.7" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M13 2.6v3.2h-3.2" })
+        ] });
+      }
+      function RestoreIcon() {
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { ...BASE2, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M3 6.5V13h6.5" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M6.5 3H13v6.5" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M13 3L6.5 9.5" })
+        ] });
+      }
+      function HidePanelIcon() {
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { ...BASE2, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M2.5 3.5h11v9h-11z" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M5.5 8h5" })
+        ] });
+      }
+      function ShowPanelIcon() {
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { ...BASE2, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M2.5 3.5h11v9h-11z" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M5.5 8h5M8 5.5v5" })
+        ] });
+      }
+      function EditIcon() {
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("svg", { ...BASE2, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M11.2 2.6l2.2 2.2-7.6 7.6-3 .8.8-3z" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("path", { d: "M9.6 4.2l2.2 2.2" })
+        ] });
+      }
+
+      // src/client/rooms.ts
       var DEFAULT_POLL_MS = 1e3;
-      var BASE2 = "/bili-danmaku-overlay";
-      var BUTTON = {
+      var BASE3 = "/bili-danmaku-overlay";
+      function parseEvent(event) {
+        try {
+          const value = JSON.parse(event);
+          return typeof value === "object" && value !== null ? value : void 0;
+        } catch {
+          return void 0;
+        }
+      }
+      var RoomStore = class {
+        listeners = /* @__PURE__ */ new Set();
+        instance;
+        source = null;
+        historyTimer = 0;
+        statsTimer = 0;
+        pollMs = 0;
+        disposed = false;
+        config;
+        constructor(room, config, initial) {
+          this.config = config;
+          this.instance = {
+            key: `room-${Math.random().toString(36).slice(2, 10)}`,
+            room,
+            state: "idle",
+            view: "window",
+            items: [],
+            notice: "",
+            online: 0,
+            liveTitle: "",
+            uname: "",
+            alias: "",
+            place: null,
+            lastAt: 0,
+            follow: true,
+            ...initial
+          };
+        }
+        /**
+         * @returns the current immutable snapshot, for `useSyncExternalStore`.
+         */
+        getSnapshot = () => this.instance;
+        /**
+         * @param listener - called after every committed change.
+         * @returns the unsubscribe function.
+         */
+        subscribe = (listener) => {
+          this.listeners.add(listener);
+          return () => {
+            this.listeners.delete(listener);
+          };
+        };
+        /**
+         * Merge a patch into the snapshot and notify.
+         *
+         * @param patch - the fields to replace.
+         */
+        set(patch) {
+          if (this.disposed) return;
+          this.instance = { ...this.instance, ...patch };
+          for (const listener of this.listeners) listener();
+        }
+        /**
+         * Record whether the reader is at the bottom.
+         *
+         * @param value - true when the list is pinned to the newest row.
+         */
+        setStickToBottom(value) {
+          if (this.instance.follow === value) return;
+          this.set({ follow: value });
+        }
+        /**
+         * Resolve the room's own title once, so the window can label itself.
+         *
+         * A failure is not reported: the cached title, or else the room number, stays on
+         * screen and the next connect tries again. An offline room still reports its
+         * title upstream, so a refusal here is about the request, not about the room.
+         */
+        async loadTitle() {
+          try {
+            const response = await fetch(`${BASE3}/api/room?room=${encodeURIComponent(this.instance.room)}`);
+            const data = await response.json();
+            if (data?.ok !== true) return;
+            const liveTitle = String(data.title ?? "").trim();
+            const uname = String(data.uname ?? "").trim();
+            if (liveTitle === "" && uname === "") return;
+            this.set({
+              liveTitle: liveTitle === "" ? this.instance.liveTitle : liveTitle,
+              uname: uname === "" ? this.instance.uname : uname
+            });
+          } catch {
+          }
+        }
+        /** Open the live event stream and start the fallback poller. */
+        connect() {
+          if (this.disposed || this.source) return;
+          this.set({ state: "connecting", notice: "" });
+          void this.loadTitle();
+          void this.pullHistory();
+          const source = new window.EventSource(
+            `${BASE3}/api/events?room=${encodeURIComponent(this.instance.room)}`
+          );
+          this.source = source;
+          source.addEventListener("status", (event) => {
+            const data = parseEvent(event.data);
+            if (!data?.state) return;
+            this.set({
+              state: data.state,
+              ...data.message === void 0 ? {} : { notice: data.message }
+            });
+            if (data.state === "live") this.pollMs = 0;
+          });
+          source.addEventListener("room", (event) => {
+            const data = parseEvent(event.data);
+            if (data?.liveStatus === void 0 || data.liveStatus === 1) return;
+            this.set({ notice: "主播暂未开播" });
+          });
+          source.addEventListener("danmaku", (event) => {
+            const item = parseEvent(event.data);
+            if (!item?.id) return;
+            if (this.instance.items.some((existing) => existing.id === item.id)) return;
+            this.append([item]);
+          });
+          source.addEventListener("error", () => {
+            if (this.source === source && this.instance.state !== "error") {
+              this.set({ state: "reconnecting" });
+            }
+          });
+          this.startHistoryPoll();
+          this.startStatsPoll();
+        }
+        /**
+         * Show this room as a window or fold it into the ball.
+         *
+         * @param view - the wanted view.
+         */
+        setView(view) {
+          this.set({ view });
+        }
+        /**
+         * Set the temporary title.
+         *
+         * @param alias - the title, empty to follow the room's own.
+         */
+        setAlias(alias) {
+          this.set({ alias });
+        }
+        /**
+         * Record the dragged window position.
+         *
+         * @param place - the position, or null to return to the default corner.
+         */
+        setPlace(place) {
+          this.set({ place });
+        }
+        /**
+         * Pull history now, for a caller that knows a change just happened.
+         *
+         * Used after a successful send: the socket never echoes your own message, so
+         * the row has to come from history.
+         */
+        refreshHistory() {
+          void this.pullHistory();
+        }
+        /** Tear the stream down but keep the collected danmaku. */
+        disconnect() {
+          this.source?.close();
+          this.source = null;
+          window.clearTimeout(this.historyTimer);
+          window.clearInterval(this.statsTimer);
+          this.historyTimer = 0;
+          this.statsTimer = 0;
+          this.set({ state: "idle" });
+        }
+        /** Tear everything down for good. */
+        dispose() {
+          this.disconnect();
+          this.disposed = true;
+          this.listeners.clear();
+        }
+        /**
+         * Append rows, keeping the newest `historyLimit` and de-duplicating by id.
+         *
+         * @param rows - the rows to append, oldest first.
+         */
+        append(rows) {
+          const limit = Math.max(20, this.config().historyLimit);
+          const byId = new Set(this.instance.items.map((item) => item.id));
+          const fresh = [];
+          for (const row of rows) {
+            if (byId.has(row.id)) continue;
+            byId.add(row.id);
+            fresh.push(row);
+          }
+          if (fresh.length === 0) return;
+          const merged = [...this.instance.items, ...fresh];
+          const lastAt = fresh[fresh.length - 1]?.history === true ? this.instance.lastAt : Date.now();
+          this.set({ items: merged.slice(-limit), lastAt });
+        }
+        /**
+         * Fold one history window into the list without reordering what is shown.
+         *
+         * The window is the newest N rows in chronological order, so anything the list
+         * holds that the window no longer covers is older and belongs in front.
+         * Prepending only the unseen rows would look right on the first pull and invert
+         * on the next, because the older rows would keep jumping ahead.
+         *
+         * @param fresh - the window, oldest first.
+         */
+        mergeHistory(fresh) {
+          if (fresh.length === 0) return;
+          const freshIds = new Set(fresh.map((item) => item.id));
+          const older = this.instance.items.filter((item) => !freshIds.has(item.id));
+          const merged = [...older, ...fresh];
+          const unchanged = merged.length === this.instance.items.length && merged.every((item, index) => item.id === this.instance.items[index]?.id);
+          if (unchanged) return;
+          const limit = Math.max(20, this.config().historyLimit);
+          const newest = fresh[fresh.length - 1];
+          this.set({
+            items: merged.slice(-limit),
+            lastAt: newest?.history === true ? this.instance.lastAt : Date.now()
+          });
+        }
+        /** Pull one history window. */
+        async pullHistory() {
+          if (this.disposed) return;
+          try {
+            const snapshot = await fetchHistory(this.instance.room);
+            if (this.disposed) return;
+            if (snapshot.intervalMs > 0) this.pollMs = snapshot.intervalMs;
+            this.mergeHistory(snapshot.items);
+          } catch {
+          }
+        }
+        /**
+         * Poll history while the socket is not delivering.
+         *
+         * The upstream socket can be refused for reasons outside our control — a
+         * throttled address, a room at capacity, a network that blocks the comet hosts.
+         * History reads a different endpoint over plain HTTPS and keeps working when the
+         * socket does not, which is exactly the case worth covering.
+         *
+         * A recursive timeout rather than an interval: the Host reports the rate its
+         * shared poller is actually using, so a fixed interval would either lag a
+         * healthy poller or pound a room that had backed off.
+         */
+        startHistoryPoll() {
+          const tick = () => {
+            if (this.disposed) return;
+            const degraded = this.instance.state === "error" || this.instance.state === "reconnecting" || this.instance.state === "connecting";
+            if (!degraded) {
+              this.historyTimer = window.setTimeout(tick, DEFAULT_POLL_MS);
+              return;
+            }
+            void this.pullHistory().finally(() => {
+              if (this.disposed) return;
+              this.historyTimer = window.setTimeout(tick, this.pollMs > 0 ? this.pollMs : DEFAULT_POLL_MS);
+            });
+          };
+          this.historyTimer = window.setTimeout(tick, DEFAULT_POLL_MS);
+        }
+        /** Poll the audience figure; nobody pushes it. */
+        startStatsPoll() {
+          const load = () => {
+            if (this.disposed) return;
+            void fetchStats(this.instance.room).then((count) => {
+              if (count !== null && count !== this.instance.online) this.set({ online: count });
+            });
+          };
+          load();
+          this.statsTimer = window.setInterval(load, Math.max(5e3, this.config().statsIntervalMs));
+        }
+      };
+      function stateTone(state) {
+        if (state === "live") return "var(--dsw-alias-state-success-primary, #22c55e)";
+        if (state === "connecting" || state === "reconnecting") {
+          return "var(--dsw-alias-state-warn-primary, #f59e0b)";
+        }
+        if (state === "error") return "var(--dsw-alias-state-error-primary, #ef4444)";
+        return "var(--dsw-alias-state-idle-primary, #8b8b8b)";
+      }
+      function aggregateState(states) {
+        if (states.length === 0) return "idle";
+        if (states.includes("live")) return "live";
+        if (states.includes("error")) return "error";
+        if (states.includes("reconnecting")) return "reconnecting";
+        if (states.includes("connecting")) return "connecting";
+        if (states.includes("offline")) return "offline";
+        return "idle";
+      }
+
+      // src/client/ball.tsx
+      var import_jsx_runtime2 = __require("react/jsx-runtime");
+      var IDLE_FADE_MS = 5e3;
+      var SUMMARY_CHARS = 42;
+      var DEFAULT_BALL_SIZE = 48;
+      var MIN_BALL_SIZE = 32;
+      var MAX_BALL_SIZE = 96;
+      function summarise(text) {
+        const flat = text.replace(/\s+/g, " ").trim();
+        return flat.length <= SUMMARY_CHARS ? flat : `${flat.slice(0, SUMMARY_CHARS)}…`;
+      }
+      function TvMark(props) {
+        return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+          "svg",
+          {
+            width: props.size,
+            height: props.size,
+            viewBox: "0 0 24 24",
+            fill: "none",
+            "aria-hidden": "true",
+            style: { display: "block" },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                "rect",
+                {
+                  x: "2.5",
+                  y: "7.5",
+                  width: "19",
+                  height: "13",
+                  rx: "3",
+                  stroke: props.color,
+                  strokeWidth: "1.8"
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("path", { d: "M7.5 4.2 10 6.9M16.5 4.2 14 6.9", stroke: props.color, strokeWidth: "1.8", strokeLinecap: "round" }),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("circle", { cx: "8.6", cy: "13", r: "1.35", fill: props.color }),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("circle", { cx: "15.4", cy: "13", r: "1.35", fill: props.color })
+            ]
+          }
+        );
+      }
+      var DRAG_SLOP = 4;
+      var SAFE = 12;
+      var MENU_WIDTH = 268;
+      function FloatingBall(props) {
+        const { t, rooms, size } = props;
+        const [idle, setIdle] = (0, import_react.useState)(false);
+        const [draft, setDraft] = (0, import_react.useState)("");
+        const [editing, setEditing] = (0, import_react.useState)(null);
+        const [aliasDraft, setAliasDraft] = (0, import_react.useState)("");
+        const idleTimer = (0, import_react.useRef)(0);
+        const [dragAt, setDragAt] = (0, import_react.useState)(null);
+        const at = dragAt ?? props.place;
+        const dragging = dragAt !== null;
+        const newest = newestRow(rooms);
+        const state = aggregateState(rooms.map((room) => room.state));
+        const [viewport, setViewport] = (0, import_react.useState)(() => ({
+          w: window.innerWidth,
+          h: window.innerHeight
+        }));
+        (0, import_react.useEffect)(() => {
+          const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+          window.addEventListener("resize", onResize);
+          return () => window.removeEventListener("resize", onResize);
+        }, []);
+        const rootRef = (0, import_react.useRef)(null);
+        const dragRef = (0, import_react.useRef)(null);
+        const latestRef = (0, import_react.useRef)(null);
+        const unfold = (0, import_react.useCallback)((point) => {
+          const centre = point.x + size / 2;
+          return centre > viewport.w / 2 ? "left" : "right";
+        }, [size, viewport.w]);
+        const onPointerDown = (0, import_react.useCallback)((event) => {
+          event.preventDefault();
+          dragRef.current = { x0: event.clientX, y0: event.clientY, moved: false };
+          latestRef.current = null;
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        }, []);
+        const onPointerMove = (0, import_react.useCallback)((event) => {
+          const drag = dragRef.current;
+          if (!drag) return;
+          if (!drag.moved) {
+            const travel = Math.abs(event.clientX - drag.x0) + Math.abs(event.clientY - drag.y0);
+            if (travel < DRAG_SLOP) return;
+            drag.moved = true;
+          }
+          const half = size / 2;
+          const x = Math.max(SAFE, Math.min(window.innerWidth - size - SAFE, event.clientX - half));
+          const y = Math.max(SAFE, Math.min(window.innerHeight - size - SAFE, event.clientY - half));
+          latestRef.current = { x, y };
+          setDragAt({ x, y });
+        }, [size]);
+        const onPointerUp = (0, import_react.useCallback)((event) => {
+          const drag = dragRef.current;
+          if (!drag) return;
+          dragRef.current = null;
+          event.currentTarget.releasePointerCapture?.(event.pointerId);
+          const landed = latestRef.current;
+          latestRef.current = null;
+          setDragAt(null);
+          if (drag.moved && landed !== null) props.onDragEnd(landed);
+          else props.onToggleMenu();
+        }, [props]);
+        (0, import_react.useEffect)(() => {
+          window.clearTimeout(idleTimer.current);
+          if (props.open) {
+            setIdle(false);
+            return void 0;
+          }
+          setIdle(false);
+          idleTimer.current = window.setTimeout(() => setIdle(true), IDLE_FADE_MS);
+          return () => window.clearTimeout(idleTimer.current);
+        }, [props.open, newest?.text, rooms.length]);
+        const wake = (0, import_react.useCallback)(() => {
+          window.clearTimeout(idleTimer.current);
+          setIdle(false);
+          idleTimer.current = window.setTimeout(() => setIdle(true), IDLE_FADE_MS);
+        }, []);
+        const collapse = idle && !props.open;
+        const anchor = at ?? { x: viewport.w - size - SAFE, y: SAFE };
+        const side = unfold(anchor);
+        const expanded = !collapse && !dragging;
+        const menuWidth = Math.min(MENU_WIDTH, viewport.w - SAFE * 2);
+        const desired = side === "left" ? anchor.x + size - menuWidth : anchor.x;
+        const menuLeft = Math.max(SAFE, Math.min(viewport.w - SAFE - menuWidth, desired));
+        const below = anchor.y + size / 2 < viewport.h / 2;
+        const menuVertical = below ? { top: anchor.y + size + 8 } : { bottom: viewport.h - anchor.y + 8 };
+        const menuMaxHeight = below ? Math.max(120, viewport.h - SAFE - (anchor.y + size + 8)) : Math.max(120, anchor.y - 8 - SAFE);
+        return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+          "div",
+          {
+            ref: rootRef,
+            style: {
+              position: "fixed",
+              left: 0,
+              top: 0,
+              width: 0,
+              height: 0,
+              zIndex: 60,
+              pointerEvents: "none"
+            },
+            children: [
+              props.open && !dragging ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                "div",
+                {
+                  style: {
+                    position: "fixed",
+                    left: menuLeft,
+                    ...menuVertical,
+                    pointerEvents: "auto",
+                    width: menuWidth,
+                    maxHeight: `min(${Math.round(menuMaxHeight)}px, 520px)`,
+                    display: "flex",
+                    flexDirection: "column",
+                    borderRadius: 12,
+                    border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))",
+                    background: "var(--dsw-alias-bg-overlay, #fff)",
+                    boxShadow: "0 10px 32px rgba(0,0,0,.18)",
+                    font: "12px/1.4 system-ui, -apple-system, sans-serif",
+                    overflow: "hidden"
+                  },
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                      "div",
+                      {
+                        style: {
+                          padding: "9px 11px",
+                          borderBottom: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "var(--dsw-alias-label-primary, #222)"
+                        },
+                        children: t("rooms")
+                      }
+                    ),
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { style: { overflowY: "auto", padding: "4px 0" }, children: rooms.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                      "div",
+                      {
+                        style: {
+                          padding: "16px 12px",
+                          textAlign: "center",
+                          color: "var(--dsw-alias-label-tertiary, #999)"
+                        },
+                        children: t("noRooms")
+                      }
+                    ) : rooms.map((room) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                      "div",
+                      {
+                        style: {
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "6px 11px"
+                        },
+                        children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "span",
+                            {
+                              style: {
+                                width: 7,
+                                height: 7,
+                                borderRadius: 999,
+                                flex: "0 0 auto",
+                                background: stateTone(room.state)
+                              }
+                            }
+                          ),
+                          editing === room.key ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "input",
+                            {
+                              autoFocus: true,
+                              value: aliasDraft,
+                              onChange: (event) => setAliasDraft(event.target.value.slice(0, 40)),
+                              onBlur: () => {
+                                props.onRename(room.key, aliasDraft.trim());
+                                setEditing(null);
+                              },
+                              onKeyDown: (event) => {
+                                if (event.key === "Enter") {
+                                  props.onRename(room.key, aliasDraft.trim());
+                                  setEditing(null);
+                                }
+                                if (event.key === "Escape") setEditing(null);
+                              },
+                              placeholder: room.liveTitle || `#${room.room}`,
+                              style: {
+                                flex: "1 1 auto",
+                                minWidth: 0,
+                                padding: "2px 6px",
+                                fontSize: 12,
+                                borderRadius: 6,
+                                border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                                background: "var(--dsw-alias-bg-layer-2, transparent)",
+                                color: "var(--dsw-alias-label-primary, #222)",
+                                outline: "none"
+                              }
+                            }
+                          ) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "button",
+                            {
+                              type: "button",
+                              onClick: () => props.onShowWindow(room.key),
+                              title: t("showWindow"),
+                              style: {
+                                flex: "1 1 auto",
+                                minWidth: 0,
+                                padding: 0,
+                                border: "none",
+                                background: "transparent",
+                                textAlign: "left",
+                                cursor: "pointer",
+                                color: "var(--dsw-alias-label-primary, #222)",
+                                font: "inherit",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap"
+                              },
+                              children: room.alias || room.liveTitle || `#${room.room}`
+                            }
+                          ),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            IconButton,
+                            {
+                              label: room.view === "hidden" ? t("showWindow") : t("hideWindow"),
+                              onClick: () => {
+                                if (room.view === "hidden") props.onShowWindow(room.key);
+                                else props.onHideWindow(room.key);
+                              },
+                              children: room.view === "hidden" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ShowPanelIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(HidePanelIcon, {})
+                            }
+                          ),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            IconButton,
+                            {
+                              label: t("rename"),
+                              onClick: () => {
+                                setEditing(room.key);
+                                setAliasDraft(room.alias);
+                              },
+                              children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(EditIcon, {})
+                            }
+                          ),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(IconButton, { label: t("removeRoom"), onClick: () => props.onRemove(room.key), children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {}) })
+                        ]
+                      },
+                      room.key
+                    )) }),
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                      "div",
+                      {
+                        style: {
+                          display: "flex",
+                          gap: 6,
+                          padding: "8px 11px",
+                          borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
+                        },
+                        children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "input",
+                            {
+                              value: draft,
+                              onChange: (event) => setDraft(event.target.value),
+                              onKeyDown: (event) => {
+                                if (event.key !== "Enter") return;
+                                props.onAddRoom(draft.trim());
+                                setDraft("");
+                              },
+                              placeholder: t("roomPlaceholder"),
+                              inputMode: "numeric",
+                              style: {
+                                flex: "1 1 auto",
+                                minWidth: 0,
+                                padding: "4px 8px",
+                                fontSize: 12,
+                                borderRadius: 7,
+                                border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                                background: "var(--dsw-alias-bg-layer-2, transparent)",
+                                color: "var(--dsw-alias-label-primary, #222)",
+                                outline: "none"
+                              }
+                            }
+                          ),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "button",
+                            {
+                              type: "button",
+                              onClick: () => {
+                                props.onAddRoom(draft.trim());
+                                setDraft("");
+                              },
+                              style: {
+                                padding: "4px 10px",
+                                fontSize: 12,
+                                borderRadius: 7,
+                                border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                                background: "transparent",
+                                color: "var(--dsw-alias-label-primary, #222)",
+                                cursor: "pointer"
+                              },
+                              children: t("addRoom")
+                            }
+                          )
+                        ]
+                      }
+                    ),
+                    rooms.length > 1 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                      "div",
+                      {
+                        style: {
+                          display: "flex",
+                          gap: 6,
+                          padding: "0 11px 9px"
+                        },
+                        children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { onClick: props.onShowAll, children: t("showWindow") }),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { onClick: props.onHideAll, children: t("ungroupAll") })
+                        ]
+                      }
+                    ) : null
+                  ]
+                }
+              ) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                "button",
+                {
+                  type: "button",
+                  onPointerDown,
+                  onPointerMove,
+                  onPointerUp,
+                  onPointerEnter: wake,
+                  title: t("manage"),
+                  style: {
+                    // The pill always stays on the dot's own edge and grows outwards into the
+                    // roomier half, so the summary never runs off screen.
+                    position: "fixed",
+                    ...side === "left" ? { right: viewport.w - anchor.x - size } : { left: anchor.x },
+                    top: anchor.y,
+                    pointerEvents: "auto",
+                    display: "flex",
+                    alignItems: "center",
+                    // The pill is anchored by the edge nearest the screen border, so the dot
+                    // must sit on that same edge (`row-reverse` puts the first child last):
+                    // otherwise the summary grows between the icon and the border and pushes
+                    // the icon halfway across the pill.
+                    flexDirection: side === "left" ? "row-reverse" : "row",
+                    gap: expanded ? 8 : 0,
+                    height: size,
+                    // A pill that would run past the edge is clamped to the safe area, which
+                    // keeps the summary readable on a phone instead of clipping it.
+                    maxWidth: side === "left" ? Math.max(size, anchor.x + size - SAFE) : Math.max(size, viewport.w - SAFE - anchor.x),
+                    minWidth: size,
+                    // No padding on the icon's side: the glyph is already centred inside a
+                    // full `size` box, so its own letterboxing is the gap to the pill edge.
+                    // Only the summary needs breathing room against the rounded end.
+                    padding: expanded ? side === "left" ? "0 0 0 14px" : "0 14px 0 0" : 0,
+                    borderRadius: 999,
+                    border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                    background: "var(--dsw-alias-bg-overlay, #fff)",
+                    boxShadow: dragging ? "0 10px 26px rgba(0,0,0,.28)" : "0 6px 22px rgba(0,0,0,.16)",
+                    cursor: dragging ? "grabbing" : "grab",
+                    overflow: "hidden",
+                    touchAction: "none",
+                    userSelect: "none",
+                    transition: dragging ? "none" : "padding 160ms ease, gap 160ms ease"
+                  },
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                      "span",
+                      {
+                        style: {
+                          position: "relative",
+                          flex: "0 0 auto",
+                          width: size,
+                          height: size,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center"
+                        },
+                        children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TvMark, { size: Math.round(size * 0.56), color: "var(--dsw-alias-label-primary, #222)" }),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "span",
+                            {
+                              style: {
+                                position: "absolute",
+                                right: Math.round(size * 0.12),
+                                bottom: Math.round(size * 0.12),
+                                width: 9,
+                                height: 9,
+                                borderRadius: 999,
+                                background: stateTone(state),
+                                border: "2px solid var(--dsw-alias-bg-overlay, #fff)"
+                              }
+                            }
+                          )
+                        ]
+                      }
+                    ),
+                    expanded ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                      "span",
+                      {
+                        style: {
+                          minWidth: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "flex-start",
+                          gap: 1,
+                          font: "12px/1.25 system-ui, -apple-system, sans-serif"
+                        },
+                        children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "span",
+                            {
+                              style: {
+                                maxWidth: 210,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                color: "var(--dsw-alias-label-secondary, #888)",
+                                fontSize: 11
+                              },
+                              children: newest ? `${newest.user}：${summarise(newest.text)}` : t("waitingNew")
+                            }
+                          ),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { style: { color: "var(--dsw-alias-label-primary, #222)", fontSize: 12 }, children: rooms.length === 0 ? t("noRooms") : `${rooms.length} ${t("roomCount")}` })
+                        ]
+                      }
+                    ) : null
+                  ]
+                }
+              )
+            ]
+          }
+        );
+      }
+      function newestRow(rooms) {
+        let best = null;
+        for (const room of rooms) {
+          const last = room.items[room.items.length - 1];
+          if (!last) continue;
+          const at = room.lastAt;
+          if (best && best.at >= at) continue;
+          best = { user: last.user, text: last.text, at };
+        }
+        return best === null ? null : { user: best.user, text: best.text };
+      }
+      function IconButton(props) {
+        return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+          "button",
+          {
+            type: "button",
+            onClick: props.onClick,
+            title: props.label,
+            "aria-label": props.label,
+            style: {
+              flex: "0 0 auto",
+              width: 20,
+              height: 20,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
+              fontSize: 12,
+              lineHeight: 1,
+              borderRadius: 5,
+              border: "1px solid transparent",
+              background: "transparent",
+              color: "var(--dsw-alias-label-secondary, #666)",
+              cursor: "pointer"
+            },
+            children: props.children
+          }
+        );
+      }
+      function TextButton(props) {
+        return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+          "button",
+          {
+            type: "button",
+            onClick: props.onClick,
+            style: {
+              flex: "1 1 auto",
+              padding: "3px 8px",
+              fontSize: 11,
+              borderRadius: 6,
+              border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))",
+              background: "transparent",
+              color: "var(--dsw-alias-label-secondary, #666)",
+              cursor: "pointer"
+            },
+            children: props.children
+          }
+        );
+      }
+
+      // src/client/config-page.tsx
+      var import_jsx_runtime3 = __require("react/jsx-runtime");
+      var FIELDS = [
+        {
+          field: "defaultRoom",
+          label: "默认直播间",
+          hint: "浮层默认打开的直播间号，留空则每次手动输入。",
+          kind: "text"
+        },
+        {
+          field: "autoConnect",
+          label: "自动连接",
+          hint: "页面加载后自动连接默认直播间。",
+          kind: "switch"
+        },
+        {
+          field: "historyLimit",
+          label: "保留条数",
+          hint: "浮层最多保留的弹幕条数。",
+          kind: "number"
+        },
+        {
+          field: "historyFetch",
+          label: "单次拉取条数",
+          hint: "连接和刷新时从历史接口拉取的条数。",
+          kind: "number"
+        },
+        {
+          field: "pollMinMs",
+          label: "轮询最快间隔",
+          hint: "历史轮询的最快间隔（毫秒）。出错时会自动退避到更慢，下限 100。",
+          kind: "number"
+        },
+        {
+          field: "statsIntervalMs",
+          label: "在线人数刷新间隔",
+          hint: "在线人数刷新间隔（毫秒）。",
+          kind: "number"
+        },
+        {
+          field: "heartbeatMs",
+          label: "弹幕服务器心跳",
+          hint: "弹幕服务器心跳间隔（毫秒）。",
+          kind: "number"
+        },
+        {
+          field: "requestTimeoutMs",
+          label: "请求超时",
+          hint: "请求 Bilibili 接口的超时时间（毫秒）。",
+          kind: "number"
+        },
+        {
+          field: "showEnterMessages",
+          label: "显示进场消息",
+          hint: "有人进入直播间时在浮层里显示一条提示。",
+          kind: "switch"
+        },
+        {
+          field: "showSuperChat",
+          label: "显示醒目留言",
+          hint: "醒目留言（Super Chat）在浮层里显示。",
+          kind: "switch"
+        }
+      ];
+      var LABELS = {
+        unavailable: "当前页面不提供配置。",
+        readOnly: "配置文件为只读，无法保存。",
+        saveFailed: "保存失败，已保留你的修改。",
+        save: "保存",
+        saving: "保存中…"
+      };
+      function SwitchField(props) {
+        const state = useFieldState(props.model, props.field);
+        return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: SWITCH_ROW, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: SWITCH_HEAD, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { style: SWITCH_LABEL, children: props.label }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+              import_dsh_client_ui_primitives.Switch,
+              {
+                checked: state.text === "on",
+                label: props.label,
+                disabled: props.disabled,
+                onChange: props.onEdit
+              }
+            )
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { style: SWITCH_HINT, children: props.hint })
+        ] });
+      }
+      function ConfigPage(props) {
+        const { view, form } = props;
+        const specs = (0, import_react2.useMemo)(
+          () => FIELDS.map((field) => {
+            if (field.kind === "number") return (0, import_dsh_client_ui_primitives.settingsNumberField)(field.field);
+            if (field.kind === "switch") return settingsBooleanField(field.field);
+            return (0, import_dsh_client_ui_primitives.settingsTextField)(field.field);
+          }),
+          []
+        );
+        const model = (0, import_react2.useMemo)(() => form ? new import_dsh_client_ui_primitives.SettingsFormModel(form, specs) : void 0, [form, specs]);
+        (0, import_react2.useEffect)(() => () => model?.dispose(), [model]);
+        const shellStore = (0, import_react2.useMemo)(() => model?.bind(() => model.shell()), [model]);
+        const shell = (0, import_react2.useSyncExternalStore)(
+          shellStore?.subscribe ?? NO_SUBSCRIBE,
+          shellStore?.getSnapshot ?? readEmptyShell,
+          shellStore?.getSnapshot ?? readEmptyShell
+        );
+        const actions = (0, import_react2.useMemo)(() => model?.actions(), [model]);
+        if (view === "summary") return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { children: "弹幕浮层的房间、条数与刷新频率。" });
+        if (!model || !actions) return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { style: NOTE, children: "正在读取配置…" });
+        if (!shell.available) return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { style: NOTE, children: LABELS.unavailable });
+        const disabled = !shell.writable || shell.saving;
+        return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(import_dsh_client_ui_primitives.SettingsForm, { labels: LABELS, state: shell, onSave: actions.save, onDiscard: actions.discard, children: [
+          FIELDS.map((field) => {
+            if (field.kind === "switch") {
+              return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+                SwitchField,
+                {
+                  field: field.field,
+                  label: field.label,
+                  hint: field.hint,
+                  model,
+                  disabled,
+                  onEdit: (next) => actions.edit(field.field, next ? "on" : "off")
+                },
+                field.field
+              );
+            }
+            return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+              ValueRow,
+              {
+                field: field.field,
+                label: field.label,
+                hint: field.hint,
+                numeric: field.kind === "number",
+                model,
+                disabled,
+                onEdit: (text) => actions.edit(field.field, text),
+                onReset: () => actions.resetField(field.field)
+              },
+              field.field
+            );
+          }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(BallSizeRow, {})
+        ] });
+      }
+      function BallSizeRow() {
+        const [size, setSize] = (0, import_react2.useState)(() => readBallSize());
+        const commit = (next) => {
+          setSize(next);
+          const saved = loadState();
+          saveState({ ...saved, ballSize: next });
+        };
+        return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: BALL_ROW, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: BALL_HEAD, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { style: BALL_LABEL, children: "悬浮球大小" }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { style: BALL_VALUE, children: [
+              size,
+              "px"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+            "input",
+            {
+              type: "range",
+              min: MIN_BALL_SIZE,
+              max: MAX_BALL_SIZE,
+              step: 4,
+              value: size,
+              onChange: (event) => commit(Number(event.target.value)),
+              style: { width: "100%", accentColor: "var(--dsw-alias-brand-primary)" }
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { style: BALL_HINT, children: "右下角悬浮球的直径。点击悬浮球管理各个直播间，刷新页面后生效。" })
+        ] });
+      }
+      function readBallSize() {
+        const stored = loadState().ballSize;
+        if (typeof stored !== "number" || !Number.isFinite(stored)) return DEFAULT_BALL_SIZE;
+        return Math.min(MAX_BALL_SIZE, Math.max(MIN_BALL_SIZE, Math.round(stored)));
+      }
+      var BALL_ROW = {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        padding: "12px 0",
+        borderBottom: "0.5px solid var(--dsw-alias-border-l2)"
+      };
+      var BALL_HEAD = {
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      };
+      var BALL_LABEL = {
+        flex: 1,
+        minWidth: 0,
+        fontSize: 13,
+        fontWeight: 500,
+        lineHeight: 1.5,
+        color: "var(--dsw-alias-label-primary)"
+      };
+      var BALL_VALUE = {
+        flex: "0 0 auto",
+        fontSize: 12,
+        color: "var(--dsw-alias-label-secondary)",
+        fontVariantNumeric: "tabular-nums"
+      };
+      var BALL_HINT = {
+        margin: 0,
+        fontSize: 12,
+        lineHeight: 1.5,
+        color: "var(--dsw-alias-label-tertiary)"
+      };
+      function settingsBooleanField(field) {
+        return {
+          field,
+          format: (value) => value === true ? "on" : value === false ? "off" : "",
+          parse: (text) => {
+            if (text === "on") return { kind: "set", value: true };
+            if (text === "off") return { kind: "set", value: false };
+            return void 0;
+          }
+        };
+      }
+      var NO_SUBSCRIBE = () => () => {
+      };
+      var EMPTY_SHELL = Object.freeze({
+        available: false,
+        writable: false,
+        dirty: false,
+        invalid: false,
+        saving: false,
+        failed: false
+      });
+      var readEmptyShell = () => EMPTY_SHELL;
+      function useFieldState(model, field) {
+        const store = (0, import_react2.useMemo)(() => model.bind(() => model.field(field)), [model, field]);
+        return (0, import_react2.useSyncExternalStore)(store.subscribe, store.getSnapshot, store.getSnapshot);
+      }
+      function ValueRow(props) {
+        const state = useFieldState(props.model, props.field);
+        return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+          import_dsh_client_ui_primitives.SettingsValueField,
+          {
+            id: `bili-danmaku-${props.field}`,
+            label: props.label,
+            hint: props.hint,
+            text: state.text,
+            overridden: state.overridden,
+            invalid: state.invalid,
+            overriddenLabel: "已修改",
+            resetLabel: "重置",
+            invalidLabel: "值无效",
+            disabled: props.disabled,
+            numeric: props.numeric,
+            onEdit: props.onEdit,
+            onReset: props.onReset
+          }
+        );
+      }
+      var SWITCH_ROW = {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        padding: "12px 0",
+        borderBottom: "0.5px solid var(--dsw-alias-border-l2)"
+      };
+      var SWITCH_HEAD = {
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      };
+      var SWITCH_LABEL = {
+        flex: 1,
+        minWidth: 0,
+        fontSize: 13,
+        fontWeight: 500,
+        lineHeight: 1.5,
+        color: "var(--dsw-alias-label-primary)"
+      };
+      var SWITCH_HINT = {
+        margin: 0,
+        fontSize: 12,
+        lineHeight: 1.5,
+        color: "var(--dsw-alias-label-tertiary)"
+      };
+      var NOTE = {
+        fontSize: 13,
+        color: "var(--dsw-alias-label-tertiary)"
+      };
+
+      // src/client/copy.ts
+      var zh = {
+        title: "直播弹幕",
+        roomPlaceholder: "直播间号",
+        connect: "连接",
+        disconnect: "断开",
+        collapse: "收起",
+        expand: "展开",
+        clear: "清空",
+        close: "关闭",
+        live: "直播中",
+        offline: "未开播",
+        connecting: "连接中",
+        reconnecting: "重连中",
+        error: "连接异常",
+        idle: "未连接",
+        empty: "暂无弹幕，连接直播间后实时显示。",
+        hint: "可拖动标题栏移动，点右上角的最小化按钮收起为悬浮球。",
+        reopen: "显示弹幕浮层",
+        superchat: "醒目留言",
+        enter: "进入",
+        sendPlaceholder: "发弹幕…",
+        send: "发送",
+        sending: "发送中",
+        sent: "已发送",
+        noCredential: "未配置登录凭据，无法发言",
+        credentialHint: "凭据缺少 bili_jct，无法发言",
+        hostNotReady: "插件后端未就绪，请重启 dsh 服务",
+        sendFailed: "发送失败",
+        refresh: "刷新弹幕",
+        online: "在线人数",
+        manage: "管理直播间",
+        rooms: "正在监控弹幕的直播间",
+        /** Counted, so it carries no verb: "3 个直播间". */
+        roomCount: "个直播间",
+        addRoom: "添加",
+        showWindow: "显示窗口",
+        hideWindow: "收到悬浮窗",
+        removeRoom: "退出监控",
+        rename: "重命名",
+        renameHint: "临时标题，重启 dsh 后恢复为直播间标题",
+        renameReset: "恢复原标题",
+        noRooms: "还没有监控中的直播间",
+        waitingNew: "等待新弹幕…",
+        minimizeWindow: "最小化",
+        ungroupAll: "全部收到悬浮窗",
+        closeAll: "全部关闭"
+      };
+      var en = {
+        title: "Live danmaku",
+        roomPlaceholder: "Room ID",
+        connect: "Connect",
+        disconnect: "Disconnect",
+        collapse: "Collapse",
+        expand: "Expand",
+        clear: "Clear",
+        close: "Close",
+        live: "Live",
+        offline: "Offline",
+        connecting: "Connecting",
+        reconnecting: "Reconnecting",
+        error: "Error",
+        idle: "Idle",
+        empty: "No danmaku yet. Connect a live room to stream it here.",
+        hint: "Drag the title bar to move; the minimize button at the top right collapses it to a floating button.",
+        reopen: "Show danmaku overlay",
+        superchat: "Super chat",
+        enter: "entered",
+        sendPlaceholder: "Send a danmaku…",
+        send: "Send",
+        sending: "Sending",
+        sent: "Sent",
+        noCredential: "No login credential configured",
+        credentialHint: "Credential is missing bili_jct",
+        hostNotReady: "Plugin backend not ready, restart the dsh service",
+        sendFailed: "Send failed",
+        refresh: "Refresh danmaku",
+        online: "Viewers online",
+        manage: "Manage rooms",
+        rooms: "Monitored rooms",
+        roomCount: "rooms",
+        addRoom: "Add",
+        showWindow: "Show window",
+        hideWindow: "Put in the ball",
+        removeRoom: "Stop monitoring",
+        rename: "Rename",
+        renameHint: "Temporary title; restores the room title on dsh restart",
+        renameReset: "Use the room title",
+        noRooms: "No rooms are being monitored",
+        waitingNew: "Waiting for new danmaku…",
+        minimizeWindow: "Minimize",
+        ungroupAll: "Put all in the ball",
+        closeAll: "Close all"
+      };
+
+      // src/client/overlay.tsx
+      var import_react4 = __require("react");
+
+      // src/client/window.tsx
+      var import_react3 = __require("react");
+      var import_jsx_runtime4 = __require("react/jsx-runtime");
+      var IDLE_FADE_MS2 = 5e3;
+      var MINIMIZED_STEP = 42;
+      var MAX_TITLE = 40;
+      var MIN_SUMMARY_CHARS = 48;
+      var MAX_NAME_CHARS = 8;
+      var MAX_NAME_FRACTION = "40%";
+      function Row(props) {
+        const { item } = props;
+        const color = item.kind === "enter" ? null : colorOf(item.color);
+        const longName = [...item.user].length > MAX_NAME_CHARS;
+        return (
+          // A wrapped message makes the row taller than its badges, and a flex row
+          // stretches every other child to that height by default, which drags a badge
+          // border down the whole row. Aligning to the top keeps each chip its own size.
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: 6, padding: "2px 0" }, children: [
+            item.medal ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+              "span",
+              {
+                style: {
+                  flex: "0 0 auto",
+                  maxWidth: "35%",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  padding: "0 4px",
+                  borderRadius: 3,
+                  fontSize: 10,
+                  lineHeight: "15px",
+                  border: "1px solid currentColor",
+                  color: "var(--dsw-alias-state-warn-primary, #f59e0b)"
+                },
+                title: `${item.medal.name}${item.medal.level}`,
+                children: [
+                  item.medal.name,
+                  item.medal.level
+                ]
+              }
+            ) : null,
+            item.kind === "superchat" && item.price ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+              "span",
+              {
+                style: {
+                  flex: "0 0 auto",
+                  padding: "0 4px",
+                  borderRadius: 3,
+                  fontSize: 10,
+                  lineHeight: "15px",
+                  background: "var(--dsw-alias-state-warn-primary, #f59e0b)",
+                  color: "#fff"
+                },
+                children: [
+                  "¥",
+                  item.price
+                ]
+              }
+            ) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+              "span",
+              {
+                style: {
+                  // A short name holds its natural width, because it never competes with the
+                  // message. Only a long one becomes shrinkable, and then only down to the
+                  // cap, so the text beside it always keeps a readable column.
+                  flex: longName ? "0 1 auto" : "0 0 auto",
+                  ...longName ? {
+                    minWidth: 0,
+                    maxWidth: MAX_NAME_FRACTION,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap"
+                  } : {},
+                  lineHeight: "15px",
+                  color: "var(--dsw-alias-label-secondary, #888)"
+                },
+                title: item.user,
+                children: [
+                  item.user,
+                  "："
+                ]
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+              "span",
+              {
+                style: {
+                  flex: "1 1 auto",
+                  minWidth: 0,
+                  // Pinned so the first text line and the 15px badges beside it share one
+                  // baseline; a browser default line height is fractional and drifts.
+                  lineHeight: "15px",
+                  // A danmaku may carry an unbroken run such as a URL, and this column is
+                  // the only one allowed to wrap. Without it the row overflows the window.
+                  overflowWrap: "anywhere",
+                  color: item.kind === "enter" ? "var(--dsw-alias-label-tertiary, #999)" : color ?? "var(--dsw-alias-label-primary, #222)"
+                },
+                children: item.text
+              }
+            )
+          ] })
+        );
+      }
+      function windowLabel(instance) {
+        const alias = instance.alias.trim();
+        if (alias !== "") return alias;
+        const title = instance.liveTitle.trim();
+        if (title !== "") return title;
+        return `#${instance.room}`;
+      }
+      function DanmakuWindow(props) {
+        const { t, instance } = props;
+        const [reply, setReply] = (0, import_react3.useState)("");
+        const [replyState, setReplyState] = (0, import_react3.useState)("idle");
+        const [editing, setEditing] = (0, import_react3.useState)(false);
+        const [titleDraft, setTitleDraft] = (0, import_react3.useState)(instance.alias);
+        const [idle, setIdle] = (0, import_react3.useState)(false);
+        const listRef = (0, import_react3.useRef)(null);
+        const cardRef = (0, import_react3.useRef)(null);
+        const dragRef = (0, import_react3.useRef)(null);
+        const [dragging, setDragging] = (0, import_react3.useState)(null);
+        const latestRef = (0, import_react3.useRef)(null);
+        const dragOriginRef = (0, import_react3.useRef)(null);
+        const idleTimer = (0, import_react3.useRef)(0);
+        const minimized = instance.view === "minimized";
+        const newest = instance.items[instance.items.length - 1];
+        (0, import_react3.useEffect)(() => {
+          window.clearTimeout(idleTimer.current);
+          if (!minimized) {
+            setIdle(false);
+            return void 0;
+          }
+          setIdle(false);
+          idleTimer.current = window.setTimeout(() => setIdle(true), IDLE_FADE_MS2);
+          return () => window.clearTimeout(idleTimer.current);
+        }, [minimized, instance.lastAt]);
+        (0, import_react3.useEffect)(() => {
+          const node = listRef.current;
+          if (!node || !props.follow) return;
+          node.scrollTop = node.scrollHeight;
+        }, [instance.items, minimized, props.follow]);
+        const onScroll = (0, import_react3.useCallback)(() => {
+          const node = listRef.current;
+          if (!node) return;
+          props.onScrolled(node.scrollHeight - node.scrollTop - node.clientHeight < 48);
+        }, [props]);
+        const onPointerDown = (0, import_react3.useCallback)((event) => {
+          if (event.target.closest("[data-no-drag]")) return;
+          const rect = cardRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          dragRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+          dragOriginRef.current = { x: event.clientX, y: event.clientY };
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        }, []);
+        const onPointerMove = (0, import_react3.useCallback)((event) => {
+          if (!dragRef.current) return;
+          const node = cardRef.current;
+          if (!node) return;
+          const width = node.offsetWidth;
+          const height = node.offsetHeight;
+          const x = Math.max(4, Math.min(window.innerWidth - width - 4, event.clientX - dragRef.current.dx));
+          const y = Math.max(4, Math.min(window.innerHeight - height - 4, event.clientY - dragRef.current.dy));
+          latestRef.current = { x, y };
+          setDragging({ x, y });
+        }, []);
+        const onPointerUp = (0, import_react3.useCallback)((event) => {
+          if (!dragRef.current) return;
+          dragRef.current = null;
+          dragOriginRef.current = null;
+          event.currentTarget.releasePointerCapture?.(event.pointerId);
+          const landed = latestRef.current;
+          latestRef.current = null;
+          setDragging(null);
+          if (landed !== null) props.onDragEnd(landed);
+        }, [props]);
+        const submit = (0, import_react3.useCallback)(async () => {
+          const text = reply.trim();
+          if (text === "" || replyState === "sending") return;
+          setReplyState("sending");
+          const result = await props.onSend(text);
+          if (!result.ok) {
+            setReplyState("idle");
+            return;
+          }
+          setReply("");
+          setReplyState("sent");
+          window.setTimeout(() => setReplyState("idle"), 1500);
+        }, [reply, replyState, props]);
+        const tone = stateTone(instance.state);
+        const newestLine = newest ? `${newest.user}：${truncate(newest.text, MIN_SUMMARY_CHARS)}` : "";
+        const showPreview = minimized && !idle && newest !== void 0;
+        const settled = dragging ?? instance.place;
+        const position = settled ? { left: settled.x, top: settled.y } : minimized ? { right: 18, bottom: 18 + 34 + props.ballSize + props.slot * MINIMIZED_STEP } : { right: 18, bottom: 18 + 34 + props.ballSize };
+        return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+          "div",
+          {
+            ref: cardRef,
+            style: {
+              position: "fixed",
+              ...position,
+              zIndex: 59,
+              width: 320,
+              maxWidth: "calc(100vw - 24px)",
+              pointerEvents: "auto",
+              display: "flex",
+              flexDirection: "column",
+              borderRadius: 10,
+              border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))",
+              background: "var(--dsw-alias-bg-overlay, #fff)",
+              boxShadow: minimized ? "0 4px 16px rgba(0,0,0,.14)" : "0 8px 28px rgba(0,0,0,.16)",
+              font: "12px/1.4 system-ui, -apple-system, sans-serif",
+              overflow: "hidden"
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+                "div",
+                {
+                  onPointerDown,
+                  onPointerMove,
+                  onPointerUp,
+                  onPointerCancel: onPointerUp,
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "7px 8px 7px 10px",
+                    // A minimized window has no content below the bar, so the rule that
+                    // separates them would hang at the bottom edge of the card.
+                    borderBottom: minimized ? "none" : "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))",
+                    cursor: dragging ? "grabbing" : "grab",
+                    userSelect: "none",
+                    touchAction: "none"
+                  },
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "span",
+                      {
+                        style: {
+                          flex: "0 0 auto",
+                          width: 8,
+                          height: 8,
+                          borderRadius: 999,
+                          background: tone,
+                          boxShadow: instance.state === "live" ? `0 0 0 3px ${tone}33` : "none"
+                        }
+                      }
+                    ),
+                    editing ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "input",
+                      {
+                        autoFocus: true,
+                        "data-no-drag": true,
+                        value: titleDraft,
+                        onChange: (event) => setTitleDraft(event.target.value.slice(0, MAX_TITLE)),
+                        onBlur: () => {
+                          props.onRename(titleDraft.trim());
+                          setEditing(false);
+                        },
+                        onKeyDown: (event) => {
+                          if (event.key === "Enter") {
+                            props.onRename(titleDraft.trim());
+                            setEditing(false);
+                          }
+                          if (event.key === "Escape") {
+                            setTitleDraft(instance.alias);
+                            setEditing(false);
+                          }
+                        },
+                        placeholder: instance.liveTitle || `#${instance.room}`,
+                        title: t("renameHint"),
+                        style: {
+                          flex: "1 1 auto",
+                          minWidth: 0,
+                          padding: "1px 5px",
+                          fontSize: 12,
+                          fontWeight: 600,
+                          borderRadius: 5,
+                          border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                          background: "var(--dsw-alias-bg-layer-2, transparent)",
+                          color: "var(--dsw-alias-label-primary, #222)",
+                          outline: "none"
+                        }
+                      }
+                    ) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "span",
+                      {
+                        "data-no-drag": true,
+                        onDoubleClick: () => {
+                          setTitleDraft(instance.alias);
+                          setEditing(true);
+                        },
+                        title: showPreview ? newestLine : instance.alias ? t("renameHint") : instance.liveTitle,
+                        style: {
+                          flex: "1 1 auto",
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          fontSize: 12,
+                          // The preview is lighter than the title so the two states stay
+                          // distinguishable while the layout does not move at all.
+                          fontWeight: showPreview ? 400 : 600,
+                          color: showPreview ? "var(--dsw-alias-label-secondary, #666)" : "var(--dsw-alias-label-primary, #222)",
+                          cursor: "text"
+                        },
+                        children: showPreview ? newestLine : windowLabel(instance)
+                      }
+                    ),
+                    instance.online > 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "span",
+                      {
+                        title: t("online"),
+                        style: {
+                          flex: "0 0 auto",
+                          fontSize: 11,
+                          color: "var(--dsw-alias-label-secondary, #888)",
+                          fontVariantNumeric: "tabular-nums"
+                        },
+                        children: instance.online
+                      }
+                    ) : null,
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-no-drag": true, onClick: props.onRefresh, title: t("refresh"), style: ICON, children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(RefreshIcon, {}) }),
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "button",
+                      {
+                        type: "button",
+                        "data-no-drag": true,
+                        onClick: minimized ? props.onRestore : props.onMinimize,
+                        title: minimized ? t("expand") : t("minimizeWindow"),
+                        style: ICON,
+                        children: minimized ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(RestoreIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MinimizeIcon, {})
+                      }
+                    ),
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-no-drag": true, onClick: props.onClose, title: t("hideWindow"), style: ICON, children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(CloseIcon, {}) })
+                  ]
+                }
+              ),
+              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                "div",
+                {
+                  ref: listRef,
+                  onScroll,
+                  style: { maxHeight: 280, minHeight: 60, overflowY: "auto", padding: "6px 10px" },
+                  children: instance.items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    "div",
+                    {
+                      style: {
+                        padding: "14px 4px",
+                        fontSize: 12,
+                        color: "var(--dsw-alias-label-tertiary, #999)",
+                        textAlign: "center"
+                      },
+                      children: instance.notice !== "" ? instance.notice : t("empty")
+                    }
+                  ) : instance.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Row, { item, superChatLabel: t("superchat") }, item.id))
+                }
+              ),
+              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+                "div",
+                {
+                  "data-no-drag": true,
+                  style: {
+                    display: "flex",
+                    gap: 6,
+                    padding: "6px 8px 8px",
+                    borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
+                  },
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "input",
+                      {
+                        value: reply,
+                        onChange: (event) => setReply(event.target.value.slice(0, 20)),
+                        onKeyDown: (event) => {
+                          if (event.key === "Enter") void submit();
+                        },
+                        placeholder: props.canReply ? t("sendPlaceholder") : props.replyReason || t("sendPlaceholder"),
+                        maxLength: 20,
+                        disabled: !props.canReply,
+                        style: {
+                          flex: "1 1 auto",
+                          minWidth: 0,
+                          padding: "4px 8px",
+                          fontSize: 12,
+                          borderRadius: 7,
+                          border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                          background: "var(--dsw-alias-bg-layer-2, transparent)",
+                          color: "var(--dsw-alias-label-primary, #222)",
+                          outline: "none",
+                          opacity: props.canReply ? 1 : 0.6
+                        }
+                      }
+                    ),
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "button",
+                      {
+                        type: "button",
+                        onClick: () => void submit(),
+                        disabled: !props.canReply || replyState === "sending",
+                        style: {
+                          ...ICON,
+                          width: "auto",
+                          padding: "0 10px",
+                          height: 24,
+                          border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                          borderRadius: 7,
+                          opacity: props.canReply ? 1 : 0.5
+                        },
+                        children: replyState === "sending" ? t("sending") : replyState === "sent" ? t("sent") : t("send")
+                      }
+                    )
+                  ]
+                }
+              )
+            ]
+          }
+        );
+      }
+      function truncate(text, max) {
+        const flat = text.replace(/\s+/g, " ").trim();
+        return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
+      }
+      var ICON = {
+        flex: "0 0 auto",
         width: 22,
         height: 22,
         display: "inline-flex",
@@ -441,142 +1843,91 @@ window.__ModuleLoader__.load({
         color: "var(--dsw-alias-label-secondary, #666)",
         cursor: "pointer"
       };
-      function StatusDot(props) {
-        const tone = props.state === "live" ? "var(--dsw-alias-state-success-primary, #22c55e)" : props.state === "connecting" || props.state === "reconnecting" ? "var(--dsw-alias-state-warn-primary, #f59e0b)" : props.state === "error" ? "var(--dsw-alias-state-error-primary, #ef4444)" : "var(--dsw-alias-state-idle-primary, #8b8b8b)";
-        return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-          "span",
-          {
-            style: {
-              width: 8,
-              height: 8,
-              borderRadius: 999,
-              background: tone,
-              boxShadow: props.state === "live" ? `0 0 0 3px ${tone}33` : "none",
-              flex: "0 0 auto"
-            }
-          }
-        );
+
+      // src/client/overlay.tsx
+      var import_jsx_runtime5 = __require("react/jsx-runtime");
+      var BOOT_POLL_MS = 3e4;
+      function asView(view) {
+        if (view === "hidden" || view === "minimized" || view === "window") return view;
+        return "window";
       }
-      function Row(props) {
-        const { item } = props;
-        const color = item.kind === "enter" ? null : colorOf(item.color);
-        return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-          "div",
-          {
-            style: {
-              display: "flex",
-              gap: 6,
-              padding: "2px 0",
-              fontSize: 12,
-              lineHeight: 1.45,
-              wordBreak: "break-word"
-            },
-            children: [
-              item.medal ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                "span",
-                {
-                  style: {
-                    flex: "0 0 auto",
-                    alignSelf: "flex-start",
-                    marginTop: 1,
-                    padding: "0 4px",
-                    borderRadius: 4,
-                    border: "1px solid var(--dsw-alias-border-l2, rgba(127,127,127,.3))",
-                    fontSize: 10,
-                    lineHeight: "15px",
-                    color: "var(--dsw-alias-label-tertiary, #999)"
-                  },
-                  children: [
-                    item.medal.name,
-                    item.medal.level
-                  ]
-                }
-              ) : null,
-              item.kind === "superchat" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                "span",
-                {
-                  style: {
-                    flex: "0 0 auto",
-                    padding: "0 4px",
-                    borderRadius: 4,
-                    background: "var(--dsw-alias-state-warn-primary, #f59e0b)",
-                    color: "#fff",
-                    fontSize: 10,
-                    lineHeight: "15px"
-                  },
-                  children: [
-                    props.superChatLabel,
-                    " ¥",
-                    item.price ?? 0
-                  ]
-                }
-              ) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { style: { flex: "0 0 auto", color: "var(--dsw-alias-label-secondary, #888)" }, children: [
-                item.user,
-                item.admin ? "：" : "："
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                "span",
-                {
-                  style: {
-                    flex: "1 1 auto",
-                    minWidth: 0,
-                    color: item.kind === "enter" ? "var(--dsw-alias-label-tertiary, #999)" : color ?? "var(--dsw-alias-label-primary, #222)"
-                  },
-                  children: item.text
-                }
-              )
-            ]
+      function restoreRooms(saved) {
+        const rooms = [];
+        const seen = /* @__PURE__ */ new Set();
+        const push = (entry) => {
+          const room = entry.room.trim();
+          if (room === "" || seen.has(room)) return;
+          seen.add(room);
+          rooms.push({ ...entry, room });
+        };
+        if (Array.isArray(saved.rooms)) {
+          for (const entry of saved.rooms) {
+            if (typeof entry?.room !== "string") continue;
+            push({
+              room: entry.room,
+              view: asView(entry.view),
+              alias: typeof entry.alias === "string" ? entry.alias : "",
+              liveTitle: typeof entry.liveTitle === "string" ? entry.liveTitle : "",
+              uname: typeof entry.uname === "string" ? entry.uname : "",
+              place: entry.place ?? null
+            });
           }
-        );
+        }
+        if (typeof saved.room === "string" && saved.room.trim() !== "" && saved.enabled === true) {
+          push({
+            room: saved.room,
+            view: saved.collapsed === true ? "minimized" : "window",
+            alias: "",
+            place: saved.place ?? null
+          });
+        }
+        return rooms;
       }
       function Overlay(props) {
         const { t } = props;
-        const saved = (0, import_react2.useRef)(loadState()).current;
-        const [room, setRoom] = (0, import_react2.useState)(String(saved.room ?? ""));
-        const [draft, setDraft] = (0, import_react2.useState)(String(saved.room ?? ""));
-        const [enabled, setEnabled] = (0, import_react2.useState)(Boolean(saved.enabled && saved.room));
-        const [collapsed, setCollapsed] = (0, import_react2.useState)(Boolean(saved.collapsed));
-        const [hidden, setHidden] = (0, import_react2.useState)(false);
-        const [place, setPlace] = (0, import_react2.useState)(saved.place ?? null);
-        const [state, setState] = (0, import_react2.useState)("idle");
-        const [items, setItems] = (0, import_react2.useState)([]);
-        const [notice, setNotice] = (0, import_react2.useState)("");
-        const [reply, setReply] = (0, import_react2.useState)("");
-        const [replyState, setReplyState] = (0, import_react2.useState)("idle");
-        const [credential, setCredential] = (0, import_react2.useState)(null);
-        const [config, setConfig] = (0, import_react2.useState)({
+        const saved = (0, import_react4.useRef)(loadState()).current;
+        const [config, setConfig] = (0, import_react4.useState)({
           historyLimit: 200,
           statsIntervalMs: 6e4,
           defaultRoom: "",
           autoConnect: false
         });
-        const [generation, setGeneration] = (0, import_react2.useState)(0);
-        const [online, setOnline] = (0, import_react2.useState)(0);
-        const listRef = (0, import_react2.useRef)(null);
-        const cardRef = (0, import_react2.useRef)(null);
-        const dragRef = (0, import_react2.useRef)(null);
-        const pinnedBottom = (0, import_react2.useRef)(true);
-        const appliedDefault = (0, import_react2.useRef)(false);
-        (0, import_react2.useEffect)(() => {
+        const [credential, setCredential] = (0, import_react4.useState)(null);
+        const [ballSize] = (0, import_react4.useState)(clampBall(saved.ballSize));
+        const [ballPlace, setBallPlace] = (0, import_react4.useState)(
+          saved.ballPlace ?? null
+        );
+        const [menuOpen, setMenuOpen] = (0, import_react4.useState)(false);
+        const configRef = (0, import_react4.useRef)(config);
+        const stores = (0, import_react4.useRef)(/* @__PURE__ */ new Map());
+        const [order, setOrder] = (0, import_react4.useState)([]);
+        const restored = (0, import_react4.useRef)(false);
+        const bootSeen = (0, import_react4.useRef)(String(saved.host ?? ""));
+        const placeRef = (0, import_react4.useRef)(saved.ballPlace ?? null);
+        const adoptBoot = (0, import_react4.useCallback)((boot) => {
+          if (bootSeen.current === boot) return;
+          const first = bootSeen.current === "";
+          bootSeen.current = boot;
+          if (first) return;
+          for (const store of stores.current.values()) store.setAlias("");
+        }, []);
+        (0, import_react4.useEffect)(() => {
           let disposed = false;
           void fetchConfig().then((next) => {
             if (disposed) return;
             setConfig(next);
-            if (appliedDefault.current || saved.room) return;
-            appliedDefault.current = true;
-            if (next.defaultRoom === "") return;
-            setDraft(next.defaultRoom);
-            if (next.autoConnect) {
-              setRoom(next.defaultRoom);
-              setEnabled(true);
-            }
+            if (next.boot !== void 0) adoptBoot(next.boot);
+            if (restored.current) return;
+            restored.current = true;
+            if (next.defaultRoom === "" || !next.autoConnect) return;
+            const store = createRoom(next.defaultRoom, { view: "window" });
+            if (store) setOrder((current) => [...current, store.getSnapshot().key]);
           });
           return () => {
             disposed = true;
           };
-        }, [saved.room]);
-        (0, import_react2.useEffect)(() => {
+        }, []);
+        (0, import_react4.useEffect)(() => {
           let disposed = false;
           void fetchCredential().then((next) => {
             if (!disposed) setCredential(next);
@@ -585,497 +1936,236 @@ window.__ModuleLoader__.load({
             disposed = true;
           };
         }, []);
-        (0, import_react2.useEffect)(() => {
-          saveState({ room, enabled, collapsed, place });
-        }, [room, enabled, collapsed, place]);
-        const [pollMs, setPollMs] = (0, import_react2.useState)(0);
-        const mergeHistory = (0, import_react2.useCallback)(
-          async (isDisposed) => {
-            const snapshot = await fetchHistory(room);
-            if (isDisposed()) return;
-            if (snapshot.intervalMs > 0) {
-              setPollMs((current) => current === snapshot.intervalMs ? current : snapshot.intervalMs);
+        const createRoom = (0, import_react4.useCallback)(
+          (room, initial) => {
+            for (const existing of stores.current.values()) {
+              if (existing.getSnapshot().room === room) return null;
             }
-            if (snapshot.items.length === 0) return;
-            const fresh = snapshot.items;
-            setItems((previous) => {
-              const freshIds = new Set(fresh.map((item) => item.id));
-              const older = previous.filter((item) => !freshIds.has(item.id));
-              const merged = [...older, ...fresh];
-              return merged.length === previous.length && merged.every((item, index) => item.id === previous[index]?.id) ? previous : merged.slice(-config.historyLimit);
+            const store = new RoomStore(room, () => configRef.current, initial);
+            stores.current.set(store.getSnapshot().key, store);
+            store.connect();
+            return store;
+          },
+          []
+        );
+        (0, import_react4.useEffect)(() => {
+          const entries = restoreRooms(saved);
+          if (entries.length === 0) return;
+          if (restored.current) return;
+          restored.current = true;
+          const keys = [];
+          for (const entry of entries) {
+            const store = createRoom(entry.room, {
+              view: asView(entry.view),
+              alias: entry.alias ?? "",
+              liveTitle: entry.liveTitle ?? "",
+              uname: entry.uname ?? "",
+              place: entry.place ?? null
+            });
+            if (store) keys.push(store.getSnapshot().key);
+          }
+          if (keys.length > 0) setOrder(keys);
+        }, []);
+        (0, import_react4.useEffect)(() => {
+          const check = async () => {
+            const next = await fetchConfig();
+            if (next.boot !== void 0) adoptBoot(next.boot);
+          };
+          const timer = window.setInterval(() => void check(), BOOT_POLL_MS);
+          return () => window.clearInterval(timer);
+        }, []);
+        const persist = (0, import_react4.useCallback)((nextOrder, nextSize) => {
+          const rooms = [];
+          for (const key of nextOrder) {
+            const store = stores.current.get(key);
+            if (!store) continue;
+            const snapshot = store.getSnapshot();
+            rooms.push({
+              room: snapshot.room,
+              view: snapshot.view,
+              alias: snapshot.alias,
+              liveTitle: snapshot.liveTitle,
+              uname: snapshot.uname,
+              place: snapshot.place
+            });
+          }
+          saveState({
+            rooms,
+            ballSize: nextSize,
+            ballPlace: placeRef.current,
+            host: bootSeen.current
+          });
+        }, []);
+        const cache = (0, import_react4.useRef)([]);
+        const joinRooms = (0, import_react4.useCallback)(() => {
+          const next = [];
+          for (const key of order) {
+            const store = stores.current.get(key);
+            if (store) next.push(store.getSnapshot());
+          }
+          const previous = cache.current;
+          const same = previous.length === next.length && previous.every((room, index) => room === next[index]);
+          if (same) return previous;
+          cache.current = next;
+          return next;
+        }, [order]);
+        const instances = (0, import_react4.useSyncExternalStore)(
+          (0, import_react4.useCallback)(
+            (listener) => {
+              const unsubscribes = [];
+              for (const key of order) {
+                const store = stores.current.get(key);
+                if (store) unsubscribes.push(store.subscribe(listener));
+              }
+              return () => {
+                for (const off of unsubscribes) off();
+              };
+            },
+            [order]
+          ),
+          joinRooms,
+          joinRooms
+        );
+        const titleSignature = instances.map((room) => `${room.room}\0${room.liveTitle}\0${room.uname}`).join("");
+        (0, import_react4.useEffect)(() => {
+          persist(order, ballSize);
+        }, [titleSignature, order, ballSize, persist]);
+        const addRoom = (0, import_react4.useCallback)(
+          (room) => {
+            const value = room.trim();
+            if (value === "") return;
+            const store = createRoom(value, { view: "window" });
+            if (!store) return;
+            setOrder((current) => {
+              const next = [...current, store.getSnapshot().key];
+              persist(next, ballSize);
+              return next;
             });
           },
-          [room, config.historyLimit]
+          [createRoom, persist, ballSize]
         );
-        const submitReply = (0, import_react2.useCallback)(async () => {
-          const text = reply.trim();
-          if (text === "" || replyState === "sending") return;
-          setReplyState("sending");
-          const result = await sendReply(room, text);
-          if (!result.ok) {
-            setReplyState("idle");
-            setNotice(result.error ?? t("sendFailed"));
-            return;
-          }
-          setReply("");
-          setReplyState("sent");
-          window.setTimeout(() => {
-            void (async () => {
-              const fresh = (await fetchHistory(room)).items;
-              const mine = fresh.find((item) => item.text === text);
-              if (!mine) return;
-              setItems(
-                (previous) => previous.some((item) => item.id === mine.id) ? previous : [...previous, mine].slice(-config.historyLimit)
-              );
-            })();
-          }, 1200);
-          window.setTimeout(() => setReplyState("idle"), 1500);
-        }, [reply, replyState, room, t, config.historyLimit]);
-        (0, import_react2.useEffect)(() => {
-          if (!enabled || room === "") {
-            setState("idle");
-            return void 0;
-          }
-          let disposed = false;
-          const isDisposed = () => disposed;
-          setState("connecting");
-          setNotice("");
-          void mergeHistory(isDisposed);
-          const onVisible = () => {
-            if (document.visibilityState === "visible") void mergeHistory(isDisposed);
-          };
-          document.addEventListener("visibilitychange", onVisible);
-          const source = new window.EventSource(`${BASE2}/api/events?room=${encodeURIComponent(room)}`);
-          const onRoom = (event) => {
-            if (disposed) return;
-            try {
-              const data = JSON.parse(String(event.data));
-              if (data.liveStatus !== void 0 && data.liveStatus !== 1) setNotice(t("offline"));
-            } catch {
+        const removeRoom = (0, import_react4.useCallback)(
+          (key) => {
+            const store = stores.current.get(key);
+            if (store) {
+              store.dispose();
+              stores.current.delete(key);
             }
-          };
-          const onStatus = (event) => {
-            if (disposed) return;
-            try {
-              const data = JSON.parse(String(event.data));
-              if (data.state) setState(data.state);
-              if (data.message) setNotice(data.message);
-            } catch {
-            }
-          };
-          const onDanmaku = (event) => {
-            if (disposed) return;
-            try {
-              const data = JSON.parse(String(event.data));
-              if (!data?.id) return;
-              setItems((previous) => {
-                if (previous.some((item) => item.id === data.id)) return previous;
-                return [...previous, data].slice(-config.historyLimit);
-              });
-            } catch {
-            }
-          };
-          source.addEventListener("room", onRoom);
-          source.addEventListener("status", onStatus);
-          source.addEventListener("danmaku", onDanmaku);
-          source.addEventListener("error", () => {
-            if (!disposed) setState("reconnecting");
-          });
-          return () => {
-            disposed = true;
-            document.removeEventListener("visibilitychange", onVisible);
-            source.close();
-          };
-        }, [enabled, room, t, generation, mergeHistory, config.historyLimit]);
-        (0, import_react2.useEffect)(() => {
-          if (!enabled || room === "") {
-            setOnline(0);
-            return void 0;
-          }
-          let disposed = false;
-          const load = () => {
-            void fetchStats(room).then((count) => {
-              if (!disposed && count !== null) setOnline(count);
+            setOrder((current) => {
+              const next = current.filter((entry) => entry !== key);
+              persist(next, ballSize);
+              return next;
             });
-          };
-          load();
-          const timer = window.setInterval(load, config.statsIntervalMs);
-          return () => {
-            disposed = true;
-            window.clearInterval(timer);
-          };
-        }, [enabled, room, config.statsIntervalMs]);
-        (0, import_react2.useEffect)(() => {
-          if (!enabled || room === "") return void 0;
-          const degraded = state === "error" || state === "reconnecting" || state === "connecting";
-          if (!degraded) return void 0;
-          let disposed = false;
-          let timer = 0;
-          const tick = () => {
-            if (disposed) return;
-            void mergeHistory(() => disposed).finally(() => {
-              if (disposed) return;
-              timer = window.setTimeout(tick, pollMs > 0 ? pollMs : DEFAULT_POLL_MS);
-            });
-          };
-          timer = window.setTimeout(tick, pollMs > 0 ? pollMs : DEFAULT_POLL_MS);
-          return () => {
-            disposed = true;
-            window.clearTimeout(timer);
-          };
-        }, [enabled, room, state, mergeHistory, pollMs]);
-        (0, import_react2.useEffect)(() => {
-          const node = listRef.current;
-          if (!node || !pinnedBottom.current) return;
-          node.scrollTop = node.scrollHeight;
-        }, [items, collapsed]);
-        const onScroll = (0, import_react2.useCallback)(() => {
-          const node = listRef.current;
-          if (!node) return;
-          pinnedBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
+          },
+          [persist, ballSize]
+        );
+        const setView = (0, import_react4.useCallback)(
+          (key, view) => {
+            const store = stores.current.get(key);
+            if (!store) return;
+            store.setView(view);
+            persist(order, ballSize);
+          },
+          [order, persist, ballSize]
+        );
+        const renameRoom = (0, import_react4.useCallback)(
+          (key, alias) => {
+            const store = stores.current.get(key);
+            if (!store) return;
+            store.setAlias(alias.slice(0, 40));
+            persist(order, ballSize);
+          },
+          [order, persist, ballSize]
+        );
+        const dragRoom = (0, import_react4.useCallback)(
+          (key, place) => {
+            const store = stores.current.get(key);
+            if (!store) return;
+            store.setPlace(place);
+            persist(order, ballSize);
+          },
+          [order, persist, ballSize]
+        );
+        const showAll = (0, import_react4.useCallback)(() => {
+          for (const key of order) stores.current.get(key)?.setView("window");
+          persist(order, ballSize);
+        }, [order, persist, ballSize]);
+        const hideAll = (0, import_react4.useCallback)(() => {
+          for (const key of order) stores.current.get(key)?.setView("hidden");
+          persist(order, ballSize);
+        }, [order, persist, ballSize]);
+        const refreshRoom = (0, import_react4.useCallback)((key) => {
+          const store = stores.current.get(key);
+          if (!store) return;
+          store.disconnect();
+          store.connect();
         }, []);
-        const onPointerDown = (0, import_react2.useCallback)((event) => {
-          if (event.target.closest("[data-no-drag]")) return;
-          const rect = cardRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          dragRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
-          event.currentTarget.setPointerCapture?.(event.pointerId);
-        }, []);
-        const onPointerMove = (0, import_react2.useCallback)((event) => {
-          if (!dragRef.current) return;
-          const width = cardRef.current?.offsetWidth ?? 320;
-          const height = cardRef.current?.offsetHeight ?? 60;
-          setPlace({
-            x: Math.max(4, Math.min(window.innerWidth - width - 4, event.clientX - dragRef.current.dx)),
-            y: Math.max(4, Math.min(window.innerHeight - height - 4, event.clientY - dragRef.current.dy))
-          });
-        }, []);
-        const onPointerUp = (0, import_react2.useCallback)(() => {
-          if (!dragRef.current) return;
-          dragRef.current = null;
-          saveState({ room, enabled, collapsed, place });
-        }, [room, enabled, collapsed, place]);
-        const connect = (0, import_react2.useCallback)(() => {
-          const value = draft.trim();
-          if (value === "") return;
-          setItems([]);
-          pinnedBottom.current = true;
-          setRoom(value);
-          setEnabled(true);
-        }, [draft]);
-        const disconnect = (0, import_react2.useCallback)(() => {
-          setEnabled(false);
-          setItems([]);
-          setState("idle");
-          setNotice("");
-        }, []);
-        if (hidden) {
-          return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-            "button",
-            {
-              type: "button",
-              onClick: () => setHidden(false),
-              title: t("reopen"),
-              style: {
-                position: "fixed",
-                right: 18,
-                bottom: 18,
-                zIndex: 60,
-                pointerEvents: "auto",
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "7px 12px",
-                borderRadius: 999,
-                border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                background: "var(--dsw-alias-bg-overlay, #fff)",
-                color: "var(--dsw-alias-label-secondary, #555)",
-                font: "12px/1.2 system-ui, -apple-system, sans-serif",
-                cursor: "pointer",
-                boxShadow: "0 6px 20px rgba(0,0,0,.14)"
-              },
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(StatusDot, { state }),
-                t("reopen")
-              ]
-            }
-          );
-        }
-        const canReply = Boolean(enabled && credential?.configured && credential.hasCsrf && room !== "");
+        const canReply = Boolean(credential?.configured && credential.hasCsrf);
         const replyReason = !credential ? "" : credential.ok === false ? t("hostNotReady") : !credential.configured ? credential.error ?? t("noCredential") : !credential.hasCsrf ? t("credentialHint") : "";
-        const position = place ? { left: place.x, top: place.y } : { right: 18, bottom: 18 };
-        return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-          "div",
-          {
-            ref: cardRef,
-            style: {
-              position: "fixed",
-              ...position,
-              zIndex: 60,
-              width: collapsed ? "auto" : 320,
-              maxWidth: "calc(100vw - 24px)",
-              pointerEvents: "auto",
-              display: "flex",
-              flexDirection: "column",
-              borderRadius: 10,
-              border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))",
-              background: "var(--dsw-alias-bg-overlay, #fff)",
-              boxShadow: "0 8px 28px rgba(0,0,0,.16)",
-              font: "12px/1.4 system-ui, -apple-system, sans-serif",
-              overflow: "hidden"
-            },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                "div",
-                {
-                  onPointerDown,
-                  onPointerMove,
-                  onPointerUp,
-                  style: {
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "7px 8px 7px 10px",
-                    borderBottom: collapsed ? "none" : "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))",
-                    cursor: "grab",
-                    userSelect: "none",
-                    touchAction: "none"
-                  },
-                  children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(StatusDot, { state }),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                      "span",
-                      {
-                        style: {
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: "var(--dsw-alias-label-primary, #222)",
-                          whiteSpace: "nowrap"
-                        },
-                        children: t("title")
-                      }
-                    ),
-                    room !== "" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                      "span",
-                      {
-                        style: {
-                          fontSize: 11,
-                          color: "var(--dsw-alias-label-secondary, #888)",
-                          fontVariantNumeric: "tabular-nums"
-                        },
-                        children: [
-                          "#",
-                          room
-                        ]
-                      }
-                    ) : null,
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { style: { flex: "1 1 auto" } }),
-                    online > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                      "span",
-                      {
-                        title: t("online"),
-                        style: {
-                          fontSize: 11,
-                          color: "var(--dsw-alias-label-secondary, #888)",
-                          fontVariantNumeric: "tabular-nums",
-                          marginRight: 8
-                        },
-                        children: [
-                          "👥 ",
-                          online
-                        ]
-                      }
-                    ) : null,
-                    items.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                      "span",
-                      {
-                        style: {
-                          fontSize: 11,
-                          color: "var(--dsw-alias-label-secondary, #888)",
-                          fontVariantNumeric: "tabular-nums"
-                        },
-                        children: items.length
-                      }
-                    ) : null,
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                      "button",
-                      {
-                        type: "button",
-                        "data-no-drag": true,
-                        onClick: () => {
-                          if (room === "") return;
-                          setItems([]);
-                          setNotice("");
-                          setGeneration((value) => value + 1);
-                        },
-                        title: t("refresh"),
-                        style: BUTTON,
-                        children: "⟳"
-                      }
-                    ),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                      "button",
-                      {
-                        type: "button",
-                        "data-no-drag": true,
-                        onClick: () => setCollapsed((value) => !value),
-                        title: collapsed ? t("expand") : t("collapse"),
-                        style: BUTTON,
-                        children: collapsed ? "▴" : "−"
-                      }
-                    ),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                      "button",
-                      {
-                        type: "button",
-                        "data-no-drag": true,
-                        onClick: () => setHidden(true),
-                        title: t("close"),
-                        style: BUTTON,
-                        children: "×"
-                      }
-                    )
-                  ]
-                }
-              ),
-              collapsed ? null : /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                  "div",
-                  {
-                    "data-no-drag": true,
-                    style: {
-                      display: "flex",
-                      gap: 6,
-                      padding: "8px 8px 6px",
-                      borderBottom: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
-                    },
-                    children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                        "input",
-                        {
-                          value: draft,
-                          onChange: (event) => setDraft(event.target.value),
-                          onKeyDown: (event) => {
-                            if (event.key === "Enter") connect();
-                          },
-                          placeholder: t("roomPlaceholder"),
-                          inputMode: "numeric",
-                          style: {
-                            flex: "1 1 auto",
-                            minWidth: 0,
-                            padding: "4px 8px",
-                            fontSize: 12,
-                            borderRadius: 7,
-                            border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                            background: "var(--dsw-alias-bg-layer-2, transparent)",
-                            color: "var(--dsw-alias-label-primary, #222)",
-                            outline: "none"
-                          }
-                        }
-                      ),
-                      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                        "button",
-                        {
-                          type: "button",
-                          onClick: enabled ? disconnect : connect,
-                          style: {
-                            ...BUTTON,
-                            width: "auto",
-                            padding: "4px 10px",
-                            borderRadius: 7,
-                            border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))"
-                          },
-                          children: enabled ? t("disconnect") : t("connect")
-                        }
-                      )
-                    ]
-                  }
-                ),
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                  "div",
-                  {
-                    ref: listRef,
-                    onScroll,
-                    style: {
-                      maxHeight: 280,
-                      minHeight: 60,
-                      overflowY: "auto",
-                      padding: "6px 10px"
-                    },
-                    children: items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                      "div",
-                      {
-                        style: {
-                          padding: "14px 4px",
-                          fontSize: 12,
-                          color: "var(--dsw-alias-label-tertiary, #999)",
-                          textAlign: "center"
-                        },
-                        children: notice !== "" ? notice : t("empty")
-                      }
-                    ) : items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Row, { item, superChatLabel: t("superchat") }, item.id))
-                  }
-                ),
-                /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                  "div",
-                  {
-                    "data-no-drag": true,
-                    style: {
-                      display: "flex",
-                      gap: 6,
-                      padding: "6px 8px 8px",
-                      borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
-                    },
-                    children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                        "input",
-                        {
-                          value: reply,
-                          onChange: (event) => setReply(event.target.value.slice(0, MAX_CHARS)),
-                          onKeyDown: (event) => {
-                            if (event.key === "Enter") void submitReply();
-                          },
-                          placeholder: canReply ? t("sendPlaceholder") : replyReason || t("sendPlaceholder"),
-                          maxLength: MAX_CHARS,
-                          disabled: !canReply,
-                          style: {
-                            flex: "1 1 auto",
-                            minWidth: 0,
-                            padding: "4px 8px",
-                            fontSize: 12,
-                            borderRadius: 7,
-                            border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                            background: "var(--dsw-alias-bg-layer-2, transparent)",
-                            color: "var(--dsw-alias-label-primary, #222)",
-                            outline: "none",
-                            opacity: canReply ? 1 : 0.6
-                          }
-                        }
-                      ),
-                      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                        "button",
-                        {
-                          type: "button",
-                          onClick: () => void submitReply(),
-                          disabled: !canReply || replyState === "sending",
-                          style: {
-                            ...BUTTON,
-                            width: "auto",
-                            padding: "4px 10px",
-                            borderRadius: 7,
-                            border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                            opacity: canReply ? 1 : 0.5
-                          },
-                          children: replyState === "sending" ? t("sending") : replyState === "sent" ? t("sent") : t("send")
-                        }
-                      )
-                    ]
-                  }
-                )
-              ] })
-            ]
-          }
+        const sendTo = (0, import_react4.useCallback)(
+          async (room, text) => {
+            const result = await sendReply(room, text);
+            if (!result.ok) return result;
+            for (const store of stores.current.values()) {
+              if (store.getSnapshot().room === room) store.refreshHistory();
+            }
+            return result;
+          },
+          []
         );
+        let slot = 0;
+        return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+          instances.filter((instance) => instance.view !== "hidden").map((instance) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            DanmakuWindow,
+            {
+              t,
+              instance,
+              canReply: canReply && instance.room !== "",
+              replyReason,
+              onSend: (text) => sendTo(instance.room, text),
+              onClose: () => setView(instance.key, "hidden"),
+              onMinimize: () => setView(instance.key, "minimized"),
+              onRestore: () => setView(instance.key, "window"),
+              onRefresh: () => refreshRoom(instance.key),
+              onRename: (alias) => renameRoom(instance.key, alias),
+              onDragEnd: (place) => dragRoom(instance.key, place),
+              onScrolled: (atBottom) => {
+                stores.current.get(instance.key)?.setStickToBottom(atBottom);
+              },
+              follow: instance.follow,
+              slot: instance.place === null && instance.view === "minimized" ? slot++ : 0,
+              ballSize
+            },
+            instance.key
+          )),
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+            FloatingBall,
+            {
+              t,
+              rooms: instances,
+              size: ballSize,
+              open: menuOpen,
+              onToggleMenu: () => setMenuOpen((value) => !value),
+              onShowWindow: (key) => setView(key, "window"),
+              onHideWindow: (key) => setView(key, "hidden"),
+              onRemove: removeRoom,
+              onRename: renameRoom,
+              onAddRoom: addRoom,
+              onShowAll: showAll,
+              onHideAll: hideAll,
+              place: ballPlace,
+              onDragEnd: (place) => {
+                placeRef.current = place;
+                setBallPlace(place);
+                persist(order, ballSize);
+              }
+            }
+          )
+        ] });
+      }
+      function clampBall(value) {
+        if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_BALL_SIZE;
+        return Math.min(MAX_BALL_SIZE, Math.max(MIN_BALL_SIZE, Math.round(value)));
       }
 
       // src/client/index.tsx

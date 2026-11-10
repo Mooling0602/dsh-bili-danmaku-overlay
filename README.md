@@ -12,7 +12,12 @@ Shows Bilibili live-room danmaku in a floating overlay inside the DSH Web UI. Th
 - Send danmaku, using the login already stored in DSH credentials
 - Loads recent history on connect, so messages sent before the panel opened are not lost
 - De-duplicates on the stable message id, so replays and overlapping sources never duplicate a row
-- Drag to move, collapse, close; position and state persist locally
+- **Multiple live rooms**: monitor several rooms at once, one window each, one connection each
+- **Bilibili TV floating ball**: a permanent round entry (top-right by default, draggable anywhere) showing the aggregate connection state and the newest danmaku; click it for the menu that manages every room, and set its size on the plugin settings page
+- A window is titled with the room's real live title; double-click to rename it temporarily. A temporary title lasts until the next dsh restart, then the room title comes back
+- A minimized window hides its controls after a few seconds, leaving the status dot and the newest danmaku; new danmaku or a click brings them back
+- Closing a window only puts it into the ball and monitoring continues; stop a room from the ball's menu instead
+- Drag, minimize, rename and position persist locally and survive a browser refresh
 - Every option is editable in the plugin settings page and applies immediately
 
 ## Install

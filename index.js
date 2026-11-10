@@ -247,28 +247,38 @@ async function biliJson(url, referer, options = {}) {
   return payload.data;
 }
 async function resolveRoom(roomInput, timeoutMs = 12e3) {
-  const primary = await biliJson(
-    `https://api.live.bilibili.com/xlive/web-room/v1/index/getRoomBaseInfo?room_ids=${roomInput}&req_biz=web_room_componet`,
-    "https://live.bilibili.com/",
-    { timeoutMs }
-  );
-  const known = primary?.by_room_ids?.[String(roomInput)];
-  if (known?.room_id) {
-    return {
-      roomId: Number(known.room_id),
-      shortId: 0,
-      liveStatus: Number(known.live_status ?? 0)
-    };
-  }
+  const known = await baseInfo(roomInput, timeoutMs);
+  if (known?.roomId) return known;
   const data = await biliJson(`https://api.live.bilibili.com/room/v1/Room/room_init?id=${roomInput}`, "https://live.bilibili.com/", {
     timeoutMs
   });
   const roomId = Number(data?.room_id ?? 0);
   if (roomId <= 0) throw new BiliError("直播间不存在", 60004);
+  const full = await baseInfo(roomId, timeoutMs);
   return {
     roomId,
     shortId: Number(data?.short_id ?? 0),
-    liveStatus: Number(data?.live_status ?? 0)
+    liveStatus: Number(data?.live_status ?? full?.liveStatus ?? 0),
+    title: full?.title ?? "",
+    uname: full?.uname ?? ""
+  };
+}
+async function baseInfo(roomId, timeoutMs) {
+  const primary = await biliJson(
+    `https://api.live.bilibili.com/xlive/web-room/v1/index/getRoomBaseInfo?room_ids=${roomId}&req_biz=web_room_componet`,
+    "https://live.bilibili.com/",
+    { timeoutMs }
+  );
+  const known = primary?.by_room_ids?.[String(roomId)];
+  if (!known?.room_id) return null;
+  const title = String(known.title ?? "").trim();
+  if (title === "") return null;
+  return {
+    roomId: Number(known.room_id),
+    shortId: Number(known.short_id ?? 0),
+    liveStatus: Number(known.live_status ?? 0),
+    title,
+    uname: String(known.uname ?? "").trim()
   };
 }
 async function fetchRoomStats(roomId, timeoutMs = 12e3) {
@@ -859,6 +869,7 @@ function readHistory(roomId) {
 
 // src/routes.ts
 var ROUTE_PREFIX = "/bili-danmaku-overlay";
+var BOOT_ID = `${process.pid}-${Date.now()}`;
 var MAX_BODY_BYTES = 64 * 1024;
 function sendJson(response, status, payload) {
   const body = JSON.stringify(payload);
@@ -908,7 +919,11 @@ async function route(request, response, config) {
       historyLimit: limits.historyLimit,
       statsIntervalMs: readNumber(config?.statsIntervalMs, DEFAULT_STATS_INTERVAL_MS),
       defaultRoom: readField(config?.defaultRoom, ""),
-      autoConnect: readField(config?.autoConnect, false)
+      autoConnect: readField(config?.autoConnect, false),
+      // Identifies this Host process. A page keeps a temporary room title while
+      // this value is unchanged and drops it when it differs, which is what makes
+      // a rename last exactly one dsh run instead of accumulating forever.
+      boot: BOOT_ID
     });
     return;
   }

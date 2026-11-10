@@ -122,23 +122,11 @@ async function biliJson<T>(
 }
 
 /**
- * Resolve a short room id to the real room id and live status.
+ * Resolve a room id to the real room id, the live status, the title and the streamer.
  *
- * ── Why `getRoomBaseInfo` comes first ──────────────────────────────────────
+ * `getRoomBaseInfo` leads because `room_init` answers 412 with an HTML block page once Bilibili decides to throttle the caller, and it does so for every header combination including anonymous ones, since the block is per IP rather than per credential. Resolution is the first call the overlay makes, so a throttled `room_init` would take the whole feature down while the history endpoint still worked. `getRoomBaseInfo` kept answering normally throughout.
  *
- * `room_init` answers 412 with an HTML block page once Bilibili decides to
- * throttle the caller, and it does so for every header combination including
- * anonymous ones — the block is per IP, not per credential. Since resolution is
- * the first call the overlay makes, a throttled `room_init` takes the whole
- * feature down even though the history endpoint still works fine.
- * `getRoomBaseInfo` was answering normally throughout, so it leads.
- *
- * ── Why `room_init` stays ──────────────────────────────────────────────────
- *
- * `getRoomBaseInfo` is keyed by *real* room ids: asking it about a short id
- * returns `code: 0` with an empty `by_room_ids`, which is indistinguishable from
- * a deleted room. Short ids still have to go through `room_init`, so it remains
- * as the fallback — reached only when the primary lookup came back empty.
+ * `room_init` stays as the fallback because `getRoomBaseInfo` is keyed by real room ids: asking it about a short id returns `code: 0` with an empty `by_room_ids`, which is indistinguishable from a deleted room. A short id therefore has to go through `room_init` first. That endpoint never reports a title, so the real id it returns is fed back into `getRoomBaseInfo`, which is the only way a room entered by its short id gets a labelled window.
  *
  * @param roomInput - a numeric room id or short id.
  * @param timeoutMs - request timeout in milliseconds.
@@ -146,23 +134,8 @@ async function biliJson<T>(
  * @throws {BiliError} when the room cannot be resolved.
  */
 export async function resolveRoom(roomInput: number, timeoutMs = 12_000): Promise<ResolvedRoom> {
-  const primary = await biliJson<{
-    by_room_ids?: Record<string, { room_id?: number; live_status?: number; uid?: number }>
-  }>(
-    'https://api.live.bilibili.com/xlive/web-room/v1/index/getRoomBaseInfo' +
-      `?room_ids=${roomInput}&req_biz=web_room_componet`,
-    'https://live.bilibili.com/',
-    { timeoutMs },
-  )
-
-  const known = primary?.by_room_ids?.[String(roomInput)]
-  if (known?.room_id) {
-    return {
-      roomId: Number(known.room_id),
-      shortId: 0,
-      liveStatus: Number(known.live_status ?? 0),
-    }
-  }
+  const known = await baseInfo(roomInput, timeoutMs)
+  if (known?.roomId) return known
 
   const data = await biliJson<{
     room_id?: number
@@ -176,10 +149,57 @@ export async function resolveRoom(roomInput: number, timeoutMs = 12_000): Promis
   const roomId = Number(data?.room_id ?? 0)
   if (roomId <= 0) throw new BiliError('直播间不存在', 60004)
 
+  // `room_init` answers the id and the live status but never the title, so a short
+  // id would otherwise produce a window labelled only with its number. The real id
+  // is known by now, and that is the key the title endpoint accepts.
+  const full = await baseInfo(roomId, timeoutMs)
   return {
     roomId,
     shortId: Number(data?.short_id ?? 0),
-    liveStatus: Number(data?.live_status ?? 0),
+    liveStatus: Number(data?.live_status ?? full?.liveStatus ?? 0),
+    title: full?.title ?? '',
+    uname: full?.uname ?? '',
+  }
+}
+
+/**
+ * Read one room's base information, which carries the title and streamer name.
+ *
+ * Keyed by the real room id: a short id gets `code: 0` with an empty
+ * `by_room_ids`, and the entry can also arrive without a title. Both cases are
+ * reported as `null` so the caller can fall back rather than show a blank label.
+ *
+ * @param roomId - a real room id.
+ * @param timeoutMs - request timeout in milliseconds.
+ * @returns the room, or `null` when this endpoint had nothing to say about it.
+ */
+async function baseInfo(roomId: number, timeoutMs: number): Promise<ResolvedRoom | null> {
+  const primary = await biliJson<{
+    by_room_ids?: Record<string, {
+      room_id?: number
+      short_id?: number
+      live_status?: number
+      uid?: number
+      title?: string
+      uname?: string
+    }>
+  }>(
+    'https://api.live.bilibili.com/xlive/web-room/v1/index/getRoomBaseInfo' +
+      `?room_ids=${roomId}&req_biz=web_room_componet`,
+    'https://live.bilibili.com/',
+    { timeoutMs },
+  )
+
+  const known = primary?.by_room_ids?.[String(roomId)]
+  if (!known?.room_id) return null
+  const title = String(known.title ?? '').trim()
+  if (title === '') return null
+  return {
+    roomId: Number(known.room_id),
+    shortId: Number(known.short_id ?? 0),
+    liveStatus: Number(known.live_status ?? 0),
+    title,
+    uname: String(known.uname ?? '').trim(),
   }
 }
 

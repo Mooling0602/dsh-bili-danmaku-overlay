@@ -14,10 +14,10 @@
  */
 
 import {
-  SegmentedControl,
   SettingsForm,
   SettingsFormModel,
   SettingsValueField,
+  Switch,
   settingsNumberField,
   settingsTextField,
   type SettingsFieldSpec,
@@ -26,7 +26,10 @@ import {
   type SettingsFormScope,
   type SettingsFormShell,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+
+import { loadState, saveState } from './api.ts'
+import { DEFAULT_BALL_SIZE, MAX_BALL_SIZE, MIN_BALL_SIZE } from './ball.tsx'
 
 /** Every field this page edits, with the copy each one shows. */
 const FIELDS = [
@@ -130,23 +133,15 @@ function SwitchField(props: {
   readonly onEdit: (next: boolean) => void
 }) {
   const state = useFieldState(props.model, props.field)
-  const id = `bili-danmaku-switch-${props.field}`
   return (
     <div style={SWITCH_ROW}>
       <div style={SWITCH_HEAD}>
-        <span style={SWITCH_LABEL} id={id}>
-          {props.label}
-        </span>
-        <SegmentedControl
-          id={id}
+        <span style={SWITCH_LABEL}>{props.label}</span>
+        <Switch
+          checked={state.text === 'on'}
           label={props.label}
-          value={state.text === 'on' ? 'on' : 'off'}
-          options={[
-            { value: 'on', label: '显示' },
-            { value: 'off', label: '隐藏' },
-          ]}
           disabled={props.disabled}
-          onChange={(next) => props.onEdit(next === 'on')}
+          onChange={props.onEdit}
         />
       </div>
       <p style={SWITCH_HINT}>{props.hint}</p>
@@ -227,9 +222,96 @@ export function ConfigPage(props: ConfigPageProps) {
           />
         )
       })}
+      <BallSizeRow />
     </SettingsForm>
   )
 }
+
+/**
+ * The floating ball's diameter.
+ *
+ * Kept in the browser rather than the Host schema: it is a taste setting that
+ * belongs to the screen the overlay sits on, it needs no server round trip, and
+ * a per-browser value is the honest model — the same account on a small laptop
+ * and a large monitor wants different sizes.
+ *
+ * @returns the labelled slider and its live preview.
+ */
+function BallSizeRow() {
+  const [size, setSize] = useState(() => readBallSize())
+  const commit = (next: number): void => {
+    setSize(next)
+    const saved = loadState()
+    saveState({ ...saved, ballSize: next })
+  }
+
+  return (
+    <div style={BALL_ROW}>
+      <div style={BALL_HEAD}>
+        <span style={BALL_LABEL}>悬浮球大小</span>
+        <span style={BALL_VALUE}>{size}px</span>
+      </div>
+      <input
+        type="range"
+        min={MIN_BALL_SIZE}
+        max={MAX_BALL_SIZE}
+        step={4}
+        value={size}
+        onChange={(event) => commit(Number(event.target.value))}
+        style={{ width: '100%', accentColor: 'var(--dsw-alias-brand-primary)' }}
+      />
+      <p style={BALL_HINT}>
+        右下角悬浮球的直径。点击悬浮球管理各个直播间，刷新页面后生效。
+      </p>
+    </div>
+  )
+}
+
+/**
+ * @returns the stored ball size, clamped into the allowed range.
+ */
+function readBallSize(): number {
+  const stored = loadState().ballSize
+  if (typeof stored !== 'number' || !Number.isFinite(stored)) return DEFAULT_BALL_SIZE
+  return Math.min(MAX_BALL_SIZE, Math.max(MIN_BALL_SIZE, Math.round(stored)))
+}
+
+const BALL_ROW = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  padding: '12px 0',
+  borderBottom: '0.5px solid var(--dsw-alias-border-l2)',
+} as const
+
+const BALL_HEAD = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+} as const
+
+const BALL_LABEL = {
+  flex: 1,
+  minWidth: 0,
+  fontSize: 13,
+  fontWeight: 500,
+  lineHeight: 1.5,
+  color: 'var(--dsw-alias-label-primary)',
+} as const
+
+const BALL_VALUE = {
+  flex: '0 0 auto',
+  fontSize: 12,
+  color: 'var(--dsw-alias-label-secondary)',
+  fontVariantNumeric: 'tabular-nums',
+} as const
+
+const BALL_HINT = {
+  margin: 0,
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: 'var(--dsw-alias-label-tertiary)',
+} as const
 
 /**
  * Stage a boolean field as its two-way switch.
