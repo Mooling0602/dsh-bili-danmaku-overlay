@@ -185,7 +185,8 @@ This plugin only takes effect inside a running `dsh` process, because it is a Co
 
 ### What the agent must never do to a live room
 
-- **Never send a danmaku to a room that is not the maintainer's own.** Reading a room is harmless and is how the plugin gets tested; writing to a stranger's chat is not. The maintainer's own room is the only target a send may ever reach, and the agent has to be told which room that is rather than guessing.
+- **During development and debugging, never send a danmaku to a room that is not the maintainer's own.** Reading a room is harmless and is how the plugin gets tested; writing to a stranger's chat is not. The maintainer's own room is the only target a debugging send may ever reach, and the agent has to be told which room that is rather than guessing.
+- **This rule governs the agent, not the plugin.** A user sending ordinary danmaku from the overlay to any room is normal use and is not restricted by it. Nothing in the code or the user documentation enforces the constraint above, so do not add a guard, a warning or a confirmation step for it.
 - **Prefer a test that carries the stored login.** A logged in request is the shape the plugin actually runs in and the one whose answers are worth trusting, so before probing an endpoint, check that the credential is available and use it. Reading a public endpoint anonymously still works and is sometimes the point, so this is a preference about which measurement is representative, not a prohibition: when a step is genuinely better anonymous, say why in the reply rather than dropping the credential quietly.
 - **Never poll faster than 0.1 seconds.** The live endpoints already throttle a busy client, and a tighter probe measures rate limiting instead of the code.
 

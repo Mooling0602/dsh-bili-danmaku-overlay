@@ -62,7 +62,6 @@ Every option is editable on the plugin settings page and applies immediately.
 
 ## Notes
 
-- Watching any room read-only is fine, but only send danmaku to your own room, never to someone else's.
 - The viewer count is a real head count, not the popularity score some Bilibili endpoints report.
 
 ## Development
