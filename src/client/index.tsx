@@ -16,7 +16,7 @@ import { Overlay, type OverlayProps } from './overlay.tsx'
 const NS = 'bili-danmaku-overlay'
 
 /** Package name the Plugins page keys a bundle's own configuration by. */
-const BUNDLE = '@local/bili-danmaku-overlay'
+const BUNDLE = 'dsh-bili-danmaku-overlay'
 
 /**
  * Settings namespaces this page waits for.

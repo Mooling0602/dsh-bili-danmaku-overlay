@@ -86,6 +86,18 @@ A room number the user types may be a short id; the resolver maps it to the real
 
 The upstream answers `-352` when a client asks too often. Two things combined caused it once: a signing bug, and firing requests too densely. Keep polling at or above 0.1 seconds, and do not burst several live endpoints at the same instant.
 
+The poller starts at `pollMinMs` (100ms by default), halves the interval on a 412 or a network error, and walks it back up on clean responses, capped at `MAX_POLL_MS` in `src/poller.ts` (30 seconds). History is plain HTTPS and is throttled separately from the comet socket.
+
+### Viewer count and sending
+
+The viewer count is `getOnlineGoldRank`'s `onlineNum`, a real head count. The `online` field other endpoints report is a popularity score that can be dozens of times larger, so the plugin does not read it.
+
+Sending needs the csrf token: `bili_jct` becomes the request's `csrf_token`, and a missing one is a hard error rather than an anonymous attempt. An expired login answers `-101` and a bad csrf answers `-111`, and both are reported with that code instead of being retried.
+
+Bilibili's comet server validates the WebSocket `Origin` and rejects a browser connection. That is why the Host holds the upstream socket and the page reads same-origin SSE, and it also keeps the danmaku token server-side.
+
+The history endpoint is misleading when called anonymously: it answers `code: 0` with empty `room` and `admin` arrays, which reads as "this room has no history" but means "not authenticated". Every request the plugin makes carries the credential for that reason.
+
 ## Upstream protocols
 
 ### WBI signing

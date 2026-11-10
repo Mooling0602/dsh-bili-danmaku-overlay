@@ -1,5 +1,5 @@
 {
-  "name": "@local/bili-danmaku-overlay",
+  "name": "dsh-bili-danmaku-overlay",
   "version": "1.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,21 @@
   "license": "MIT",
   "author": "Mooling0602",
   "icon": "icon.svg",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mooling0602/dsh-bili-danmaku-overlay.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Mooling0602/dsh-bili-danmaku-overlay/issues"
+  },
+  "homepage": "https://github.com/Mooling0602/dsh-bili-danmaku-overlay#readme",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "bilibili",
+    "danmaku",
+    "overlay"
+  ],
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
