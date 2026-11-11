@@ -811,13 +811,15 @@ window.__ModuleLoader__.load({
                                 setDraft("");
                               },
                               style: {
+                                flex: "0 0 auto",
                                 padding: "4px 10px",
                                 fontSize: 12,
                                 borderRadius: 7,
                                 border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
                                 background: "transparent",
                                 color: "var(--dsw-alias-label-primary, #222)",
-                                cursor: "pointer"
+                                cursor: "pointer",
+                                whiteSpace: "nowrap"
                               },
                               children: t("addRoom")
                             }
@@ -1811,7 +1813,8 @@ window.__ModuleLoader__.load({
                           height: 24,
                           border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
                           borderRadius: 7,
-                          opacity: props.canReply ? 1 : 0.5
+                          opacity: props.canReply ? 1 : 0.5,
+                          whiteSpace: "nowrap"
                         },
                         children: replyState === "sending" ? t("sending") : replyState === "sent" ? t("sent") : t("send")
                       }

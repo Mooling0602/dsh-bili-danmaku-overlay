@@ -476,6 +476,7 @@ export function FloatingBall(props: BallProps) {
                 setDraft('')
               }}
               style={{
+                flex: '0 0 auto',
                 padding: '4px 10px',
                 fontSize: 12,
                 borderRadius: 7,
@@ -483,6 +484,7 @@ export function FloatingBall(props: BallProps) {
                 background: 'transparent',
                 color: 'var(--dsw-alias-label-primary, #222)',
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
               }}
             >
               {t('addRoom')}

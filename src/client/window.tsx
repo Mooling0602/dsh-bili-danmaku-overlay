@@ -540,6 +540,7 @@ export function DanmakuWindow(props: WindowProps) {
             border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
             borderRadius: 7,
             opacity: props.canReply ? 1 : 0.5,
+            whiteSpace: 'nowrap',
           }}
         >
           {replyState === 'sending' ? t('sending') : replyState === 'sent' ? t('sent') : t('send')}
