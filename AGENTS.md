@@ -30,7 +30,6 @@ Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0
 ```
 
 - **Types:** `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `build`, `ci`, `chore`, `style`, `revert`. Any other type needs a reason in review.
-- **This repository does not use a scope.** Write `feat: manage several live rooms from one ball`, not `feat(client): ...`. Introducing a scope is a maintainer decision, not an agent's.
 - **Description** is lowercase, imperative and carries no trailing period. Describe the change, not the file. Write "keep the ball inside the viewport safe area" rather than "update ball.tsx".
 - **Body** explains why the change was made. It is mandatory for a bug fix or for a change to a persisted format, because a one line subject cannot justify either of them.
 - **Do not wrap the message by hand.** The subject and each body paragraph are one complete line, with no limit on how many characters that line holds. Where a body benefits from separate points, use a Markdown list with one point per line rather than hard-wrapped prose; section 7 states the rule and the reason it exists.
