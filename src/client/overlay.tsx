@@ -40,14 +40,16 @@ import {
   MIN_WINDOW_HEIGHT,
   MIN_WINDOW_WIDTH,
   onStateChange,
+  RECENT_ROOM_LIMIT,
   saveState,
   sendReply,
   type Credential,
   type RemoteConfig,
   type SavedRoom,
   type SavedState,
+  withRecentRoom,
 } from './api.ts'
-import { FloatingBall, DEFAULT_BALL_SIZE, MIN_BALL_SIZE, MAX_BALL_SIZE } from './ball.tsx'
+import { FloatingBall, DEFAULT_BALL_SIZE, MIN_BALL_SIZE, MAX_BALL_SIZE, type RoomCandidate } from './ball.tsx'
 import { RoomStore, type RoomInstance, type RoomView } from './rooms.ts'
 import { DanmakuWindow } from './window.tsx'
 
@@ -59,15 +61,6 @@ export interface OverlayProps {
 /** How often to re-read the Host boot id, in milliseconds. */
 const BOOT_POLL_MS = 30_000
 
-/**
- * Read the stored layout as a room list.
- *
- * Older saves hold a single `room` and a `collapsed` flag; they are folded into
- * the list form so an upgrade does not lose the room someone was watching.
- *
- * @param saved - the raw stored state.
- * @returns the rooms to restore, without duplicates.
- */
 /**
  * Normalise a stored view value.
  *
@@ -82,6 +75,44 @@ function asView(view: unknown): RoomView {
   return 'window'
 }
 
+/**
+ * Every room the menu can offer, newest first.
+ *
+ * The list merges the rooms that were being monitored and the rooms this browser
+ * opened before, because from the menu's point of view they are the same thing: a
+ * room id worth reopening. Ordering puts currently monitored rooms first, then
+ * the history, and the `recentRooms` list is authoritative for recency.
+ *
+ * @param saved - the raw stored state.
+ * @returns the rooms to list, without duplicates.
+ */
+function loadRecent(saved: SavedState): readonly SavedRoom[] {
+  const recent: SavedRoom[] = []
+  const seen = new Set<string>()
+  const push = (entry: SavedRoom): void => {
+    const room = entry.room.trim()
+    if (room === '' || seen.has(room)) return
+    seen.add(room)
+    recent.push({ ...entry, room })
+  }
+
+  for (const entry of saved.recentRooms ?? []) {
+    if (typeof entry?.room === 'string') push(entry)
+  }
+  for (const entry of restoreRooms(saved)) push(entry)
+
+  return recent.slice(0, RECENT_ROOM_LIMIT)
+}
+
+/**
+ * Read the stored layout as a room list.
+ *
+ * Older saves hold a single `room` and a `collapsed` flag; they are folded into
+ * the list form so an upgrade does not lose a room the user opened before.
+ *
+ * @param saved - the raw stored state.
+ * @returns the rooms, without duplicates.
+ */
 function restoreRooms(saved: SavedState): SavedRoom[] {
   const rooms: SavedRoom[] = []
   const seen = new Set<string>()
@@ -149,7 +180,8 @@ export function Overlay(props: OverlayProps) {
   useEffect(
     () =>
       onStateChange(() => {
-        const next = readFront(loadState())
+        const stored = loadState()
+        const next = readFront(stored)
         // Returning the previous object when nothing relevant moved keeps the
         // overlay from re-rendering on the many writes that only touch rooms.
         setFront((previous) =>
@@ -160,6 +192,15 @@ export function Overlay(props: OverlayProps) {
             ? previous
             : next,
         )
+        // The history lives in the same document, so it is re-read here rather than
+        // kept in step by hand at every call site that saves a room.
+        const reopened = loadRecent(stored)
+        setRecent((previous) =>
+          previous.length === reopened.length &&
+          previous.every((entry, index) => entry.room === reopened[index]?.room)
+            ? previous
+            : reopened,
+        )
       }),
     [],
   )
@@ -169,6 +210,14 @@ export function Overlay(props: OverlayProps) {
   const [ballPlace, setBallPlace] = useState<{ x: number; y: number } | null>(
     saved.ballPlace ?? null,
   )
+  /**
+   * Every room this browser can reopen, newest first.
+   *
+   * Re-read whenever the stored layout changes, because `persist` owns the write:
+   * the overlay records a room by saving it, so the menu's copy has to follow the
+   * store rather than be maintained beside it.
+   */
+  const [recent, setRecent] = useState<readonly SavedRoom[]>(() => loadRecent(saved))
   const [menuOpen, setMenuOpen] = useState(false)
 
   /**
@@ -210,29 +259,19 @@ export function Overlay(props: OverlayProps) {
     for (const store of stores.current.values()) store.setAlias('')
   }, [])
 
-  // Read the Host's limits once, then seed the first room from them when nothing
-  // was restored, so `defaultRoom` and `autoConnect` work together.
+  // Read the Host's limits once. Opening the configured room is a separate effect
+  // because it needs `createRoom`, which is declared after this one.
   useEffect(() => {
     let disposed = false
     void fetchConfig().then((next) => {
       if (disposed) return
       setConfig(next)
       if (next.boot !== undefined) adoptBoot(next.boot)
-      // Nothing stored and nothing on screen: fall back to the configured default.
-      // The stored-rooms effect owns the restore flag, so this only fills the empty
-      // case and never competes with it.
-      if (restored.current) return
-      restored.current = true
-      if (next.defaultRoom === '' || !next.autoConnect) return
-      const store = createRoom(next.defaultRoom, { view: 'window' })
-      if (store) setOrder((current) => [...current, store.getSnapshot().key])
     })
     return () => {
       disposed = true
     }
-    // `createRoom` is stable; the restore decision runs once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [adoptBoot])
 
   useEffect(() => {
     let disposed = false
@@ -266,27 +305,25 @@ export function Overlay(props: OverlayProps) {
     [],
   )
 
-  // Restore the stored rooms once. An empty restore leaves the flag unset so the
-  // config fallback can still open the default room.
+  // Nothing is restored to the screen. The stored rooms and the saved history are
+  // both candidates the menu offers, and only `autoConnect` opens a room on load,
+  // so a reload never resumes a stream the user did not ask for.
+  //
+  // The flag is set only once the Host's configuration has actually arrived. The
+  // first render runs this effect with the placeholder config, whose room is empty,
+  // so claiming the one attempt there would make `autoConnect` a setting that never
+  // fires.
   useEffect(() => {
-    const entries = restoreRooms(saved)
-    if (entries.length === 0) return
     if (restored.current) return
+    if (config.defaultRoom === '' && config.autoConnect === false) return
     restored.current = true
-    const keys: string[] = []
-    for (const entry of entries) {
-      const store = createRoom(entry.room, {
-        view: asView(entry.view),
-        alias: entry.alias ?? '',
-        liveTitle: entry.liveTitle ?? '',
-        uname: entry.uname ?? '',
-        place: entry.place ?? null,
-      })
-      if (store) keys.push(store.getSnapshot().key)
-    }
-    if (keys.length > 0) setOrder(keys)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (config.defaultRoom === '' || !config.autoConnect) return
+    const store = createRoom(config.defaultRoom, { view: 'window' })
+    if (!store) return
+    setOrder((current) => [...current, store.getSnapshot().key])
+    // `persist` writes the room into `recentRooms` with the layout, so the menu picks
+    // it up through the same state subscription as every other entry.
+  }, [config, createRoom])
 
   // A temporary title belongs to one Host run. When the process behind the page
   // changes, the aliases made in the old run stop applying and every window falls
@@ -300,8 +337,12 @@ export function Overlay(props: OverlayProps) {
     return () => window.clearInterval(timer)
   }, [])
 
-  // Persist whenever the layout changes. Reads go through each store's snapshot so
-  // the saved list always matches what is on screen.
+  // Persist the live rooms as history, not as a session. A reload never resumes a
+  // room that was being watched: connecting is a deliberate act, so the stored
+  // rooms become the menu's shortlist and only `autoConnect` opens anything.
+  // Reads go through each store's snapshot so the saved list matches what is on
+  // screen. `recentRooms` keeps rooms that are no longer monitored, because the
+  // point of the list is reopening one after it was stopped.
   const persist = useCallback((nextOrder: readonly string[], nextSize: number) => {
     const rooms: SavedRoom[] = []
     for (const key of nextOrder) {
@@ -328,9 +369,20 @@ export function Overlay(props: OverlayProps) {
     // it alive would bring a removed room back on the next load. Dropping it here is
     // what ends the transition.
     const { room: _room, enabled: _enabled, collapsed: _collapsed, place: _place, ...kept } = loadState()
+    // A live room that the history has not listed yet is new, so it joins at the
+    // front. One that is already listed keeps the position it had: re-adding a room
+    // on every write would reorder the menu each time a window merely moved.
+    let recent = kept.recentRooms
+    const listed = new Set((recent ?? []).map((entry) => entry.room))
+    for (const entry of rooms) {
+      if (listed.has(entry.room)) continue
+      listed.add(entry.room)
+      recent = withRecentRoom(recent, entry)
+    }
     saveState({
       ...kept,
       rooms,
+      recentRooms: recent,
       ballSize: nextSize,
       ballPlace: placeRef.current,
       host: bootSeen.current,
@@ -399,6 +451,8 @@ export function Overlay(props: OverlayProps) {
       if (!store) return
       setOrder((current) => {
         const next = [...current, store.getSnapshot().key]
+        // `persist` folds the new room into `recentRooms` as part of the same write,
+        // so the menu and the stored history cannot disagree about it.
         persist(next, ballSize)
         return next
       })
@@ -499,6 +553,29 @@ export function Overlay(props: OverlayProps) {
   // ball; the count resets per render so closing one closes its gap.
   let slot = 0
 
+  // The menu lists what can be reopened. A live room is labelled with what its
+  // window shows, a room only known from history with what was cached, and a room
+  // known only by its id falls back to the number.
+  const candidates: RoomCandidate[] = []
+  const listed = new Set<string>()
+  for (const instance of instances) {
+    listed.add(instance.room)
+    candidates.push({
+      room: instance.room,
+      label: instance.alias || instance.liveTitle || instance.uname || '',
+      live: true,
+    })
+  }
+  for (const entry of recent) {
+    if (listed.has(entry.room)) continue
+    listed.add(entry.room)
+    candidates.push({
+      room: entry.room,
+      label: entry.alias || entry.liveTitle || entry.uname || '',
+      live: false,
+    })
+  }
+
   return (
     <>
       {/* A hidden room is folded into the ball: no window, no strip, but still live. */}
@@ -533,6 +610,8 @@ export function Overlay(props: OverlayProps) {
       <FloatingBall
         t={t}
         rooms={instances}
+        candidates={candidates}
+        configuredRoom={config.defaultRoom}
         size={ballSize}
         uiScale={front.uiScale}
         open={menuOpen}

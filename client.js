@@ -80,6 +80,13 @@ window.__ModuleLoader__.load({
         };
       }
       var DEFAULT_WINDOW_WIDTH = 320;
+      var RECENT_ROOM_LIMIT = 12;
+      function withRecentRoom(recent, entry) {
+        const room = entry.room.trim();
+        if (room === "") return recent ?? [];
+        const rest = (recent ?? []).filter((item) => item.room !== room);
+        return [entry, ...rest].slice(0, RECENT_ROOM_LIMIT);
+      }
       var MIN_WINDOW_WIDTH = 240;
       var MAX_WINDOW_WIDTH = 720;
       var DEFAULT_WINDOW_HEIGHT = 300;
@@ -567,6 +574,9 @@ window.__ModuleLoader__.load({
         const { t, rooms, size } = props;
         const bs = (value) => Math.max(1, Math.round(value * (size / DEFAULT_BALL_SIZE)));
         const ds = (value) => Math.max(1, Math.round(value * (props.uiScale / 100)));
+        const reopenable = props.candidates.filter(
+          (entry) => !entry.live && entry.room !== props.configuredRoom
+        );
         const [idle, setIdle] = (0, import_react.useState)(false);
         const [draft, setDraft] = (0, import_react.useState)("");
         const [editing, setEditing] = (0, import_react.useState)(null);
@@ -697,120 +707,240 @@ window.__ModuleLoader__.load({
                         children: t("rooms")
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { style: { overflowY: "auto", padding: `${ds(4)}px 0` }, children: rooms.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                      "div",
-                      {
-                        style: {
-                          padding: `${ds(16)}px ${ds(12)}px`,
-                          textAlign: "center",
-                          color: "var(--dsw-alias-label-tertiary, #999)"
-                        },
-                        children: t("noRooms")
-                      }
-                    ) : rooms.map((room) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                      "div",
-                      {
-                        style: {
-                          display: "flex",
-                          alignItems: "center",
-                          gap: ds(6),
-                          padding: `${ds(6)}px ${ds(11)}px`
-                        },
-                        children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            "span",
-                            {
-                              style: {
-                                width: ds(7),
-                                height: ds(7),
-                                borderRadius: 999,
-                                flex: "0 0 auto",
-                                background: stateTone(room.state)
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { overflowY: "auto", padding: `${ds(4)}px 0` }, children: [
+                      props.configuredRoom !== "" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                        "div",
+                        {
+                          style: {
+                            display: "flex",
+                            alignItems: "center",
+                            gap: ds(6),
+                            padding: `${ds(6)}px ${ds(11)}px`,
+                            borderBottom: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.14))"
+                          },
+                          children: [
+                            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                              "span",
+                              {
+                                style: {
+                                  width: ds(7),
+                                  height: ds(7),
+                                  borderRadius: 999,
+                                  flex: "0 0 auto",
+                                  // The configured room is pinned, not monitored, so it carries the
+                                  // same tone a connected room would rather than a live colour it
+                                  // has not earned.
+                                  background: "var(--dsw-alias-label-tertiary, #999)"
+                                }
                               }
-                            }
-                          ),
-                          editing === room.key ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            "input",
-                            {
-                              autoFocus: true,
-                              value: aliasDraft,
-                              onChange: (event) => setAliasDraft(event.target.value.slice(0, 40)),
-                              onBlur: () => {
-                                props.onRename(room.key, aliasDraft.trim());
-                                setEditing(null);
-                              },
-                              onKeyDown: (event) => {
-                                if (event.key === "Enter") {
+                            ),
+                            /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                              "button",
+                              {
+                                type: "button",
+                                onClick: () => props.onAddRoom(props.configuredRoom),
+                                title: t("openRoom"),
+                                style: {
+                                  flex: "1 1 auto",
+                                  minWidth: 0,
+                                  padding: 0,
+                                  border: "none",
+                                  background: "transparent",
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  color: "var(--dsw-alias-label-primary, #222)",
+                                  font: "inherit",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap"
+                                },
+                                children: [
+                                  t("configuredRoom"),
+                                  " #",
+                                  props.configuredRoom
+                                ]
+                              }
+                            )
+                          ]
+                        }
+                      ) : null,
+                      rooms.length === 0 && props.candidates.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                        "div",
+                        {
+                          style: {
+                            padding: `${ds(16)}px ${ds(12)}px`,
+                            textAlign: "center",
+                            color: "var(--dsw-alias-label-tertiary, #999)"
+                          },
+                          children: t("noRooms")
+                        }
+                      ) : rooms.map((room) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                        "div",
+                        {
+                          style: {
+                            display: "flex",
+                            alignItems: "center",
+                            gap: ds(6),
+                            padding: `${ds(6)}px ${ds(11)}px`
+                          },
+                          children: [
+                            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                              "span",
+                              {
+                                style: {
+                                  width: ds(7),
+                                  height: ds(7),
+                                  borderRadius: 999,
+                                  flex: "0 0 auto",
+                                  background: stateTone(room.state)
+                                }
+                              }
+                            ),
+                            editing === room.key ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                              "input",
+                              {
+                                autoFocus: true,
+                                value: aliasDraft,
+                                onChange: (event) => setAliasDraft(event.target.value.slice(0, 40)),
+                                onBlur: () => {
                                   props.onRename(room.key, aliasDraft.trim());
                                   setEditing(null);
+                                },
+                                onKeyDown: (event) => {
+                                  if (event.key === "Enter") {
+                                    props.onRename(room.key, aliasDraft.trim());
+                                    setEditing(null);
+                                  }
+                                  if (event.key === "Escape") setEditing(null);
+                                },
+                                placeholder: room.liveTitle || `#${room.room}`,
+                                style: {
+                                  flex: "1 1 auto",
+                                  minWidth: 0,
+                                  padding: `${ds(2)}px ${ds(6)}px`,
+                                  fontSize: ds(12),
+                                  borderRadius: ds(6),
+                                  border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                                  background: "var(--dsw-alias-bg-layer-2, transparent)",
+                                  color: "var(--dsw-alias-label-primary, #222)",
+                                  outline: "none"
                                 }
-                                if (event.key === "Escape") setEditing(null);
-                              },
-                              placeholder: room.liveTitle || `#${room.room}`,
-                              style: {
-                                flex: "1 1 auto",
-                                minWidth: 0,
-                                padding: `${ds(2)}px ${ds(6)}px`,
-                                fontSize: ds(12),
-                                borderRadius: ds(6),
-                                border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                                background: "var(--dsw-alias-bg-layer-2, transparent)",
-                                color: "var(--dsw-alias-label-primary, #222)",
-                                outline: "none"
                               }
-                            }
-                          ) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            "button",
-                            {
-                              type: "button",
-                              onClick: () => props.onShowWindow(room.key),
-                              title: t("showWindow"),
-                              style: {
-                                flex: "1 1 auto",
-                                minWidth: 0,
-                                padding: 0,
-                                border: "none",
-                                background: "transparent",
-                                textAlign: "left",
-                                cursor: "pointer",
-                                color: "var(--dsw-alias-label-primary, #222)",
-                                font: "inherit",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap"
-                              },
-                              children: room.alias || room.liveTitle || `#${room.room}`
-                            }
-                          ),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            IconButton,
-                            {
-                              label: room.view === "hidden" ? t("showWindow") : t("hideWindow"),
-                              scale: ds,
-                              onClick: () => {
-                                if (room.view === "hidden") props.onShowWindow(room.key);
-                                else props.onHideWindow(room.key);
-                              },
-                              children: room.view === "hidden" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ShowPanelIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(HidePanelIcon, {})
-                            }
-                          ),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            IconButton,
-                            {
-                              label: t("rename"),
-                              scale: ds,
-                              onClick: () => {
-                                setEditing(room.key);
-                                setAliasDraft(room.alias);
-                              },
-                              children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(EditIcon, {})
-                            }
-                          ),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(IconButton, { label: t("removeRoom"), scale: ds, onClick: () => props.onRemove(room.key), children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {}) })
-                        ]
-                      },
-                      room.key
-                    )) }),
+                            ) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                              "button",
+                              {
+                                type: "button",
+                                onClick: () => props.onShowWindow(room.key),
+                                title: t("showWindow"),
+                                style: {
+                                  flex: "1 1 auto",
+                                  minWidth: 0,
+                                  padding: 0,
+                                  border: "none",
+                                  background: "transparent",
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  color: "var(--dsw-alias-label-primary, #222)",
+                                  font: "inherit",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap"
+                                },
+                                children: room.alias || room.liveTitle || `#${room.room}`
+                              }
+                            ),
+                            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                              IconButton,
+                              {
+                                label: room.view === "hidden" ? t("showWindow") : t("hideWindow"),
+                                scale: ds,
+                                onClick: () => {
+                                  if (room.view === "hidden") props.onShowWindow(room.key);
+                                  else props.onHideWindow(room.key);
+                                },
+                                children: room.view === "hidden" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ShowPanelIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(HidePanelIcon, {})
+                              }
+                            ),
+                            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                              IconButton,
+                              {
+                                label: t("rename"),
+                                scale: ds,
+                                onClick: () => {
+                                  setEditing(room.key);
+                                  setAliasDraft(room.alias);
+                                },
+                                children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(EditIcon, {})
+                              }
+                            ),
+                            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(IconButton, { label: t("removeRoom"), scale: ds, onClick: () => props.onRemove(room.key), children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {}) })
+                          ]
+                        },
+                        room.key
+                      )),
+                      reopenable.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                          "div",
+                          {
+                            style: {
+                              padding: `${ds(8)}px ${ds(11)}px ${ds(2)}px`,
+                              fontSize: ds(11),
+                              color: "var(--dsw-alias-label-tertiary, #999)"
+                            },
+                            children: t("recentRooms")
+                          }
+                        ),
+                        reopenable.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                          "div",
+                          {
+                            style: {
+                              display: "flex",
+                              alignItems: "center",
+                              gap: ds(6),
+                              padding: `${ds(6)}px ${ds(11)}px`
+                            },
+                            children: [
+                              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                                "span",
+                                {
+                                  style: {
+                                    width: ds(7),
+                                    height: ds(7),
+                                    borderRadius: 999,
+                                    flex: "0 0 auto",
+                                    background: "var(--dsw-alias-label-tertiary, #999)"
+                                  }
+                                }
+                              ),
+                              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                                "button",
+                                {
+                                  type: "button",
+                                  onClick: () => props.onAddRoom(entry.room),
+                                  title: t("openRoom"),
+                                  style: {
+                                    flex: "1 1 auto",
+                                    minWidth: 0,
+                                    padding: 0,
+                                    border: "none",
+                                    background: "transparent",
+                                    textAlign: "left",
+                                    cursor: "pointer",
+                                    color: "var(--dsw-alias-label-secondary, #666)",
+                                    font: "inherit",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap"
+                                  },
+                                  children: entry.label || `#${entry.room}`
+                                }
+                              )
+                            ]
+                          },
+                          entry.room
+                        ))
+                      ] }) : null
+                    ] }),
                     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
                       "div",
                       {
@@ -1543,6 +1673,9 @@ window.__ModuleLoader__.load({
         stateHistory: "正在查看历史弹幕",
         stateIdle: "未连接",
         noRooms: "还没有监控中的直播间",
+        recentRooms: "最近连接",
+        configuredRoom: "默认直播间",
+        openRoom: "打开",
         waitingNew: "等待新弹幕…",
         minimizeWindow: "最小化",
         ungroupAll: "全部收到悬浮窗",
@@ -1599,6 +1732,9 @@ window.__ModuleLoader__.load({
         stateHistory: "Reading history danmaku",
         stateIdle: "Not connected",
         noRooms: "No rooms are being monitored",
+        recentRooms: "Recently connected",
+        configuredRoom: "Default room",
+        openRoom: "Open",
         waitingNew: "Waiting for new danmaku…",
         minimizeWindow: "Minimize",
         ungroupAll: "Put all in the ball",
@@ -2239,6 +2375,21 @@ window.__ModuleLoader__.load({
         if (view === "hidden" || view === "minimized" || view === "window") return view;
         return "window";
       }
+      function loadRecent(saved) {
+        const recent = [];
+        const seen = /* @__PURE__ */ new Set();
+        const push = (entry) => {
+          const room = entry.room.trim();
+          if (room === "" || seen.has(room)) return;
+          seen.add(room);
+          recent.push({ ...entry, room });
+        };
+        for (const entry of saved.recentRooms ?? []) {
+          if (typeof entry?.room === "string") push(entry);
+        }
+        for (const entry of restoreRooms(saved)) push(entry);
+        return recent.slice(0, RECENT_ROOM_LIMIT);
+      }
       function restoreRooms(saved) {
         const rooms = [];
         const seen = /* @__PURE__ */ new Set();
@@ -2284,9 +2435,14 @@ window.__ModuleLoader__.load({
         const [front, setFront] = (0, import_react4.useState)(() => readFront(saved));
         (0, import_react4.useEffect)(
           () => onStateChange(() => {
-            const next = readFront(loadState());
+            const stored = loadState();
+            const next = readFront(stored);
             setFront(
               (previous) => previous.ballSize === next.ballSize && previous.width === next.width && previous.height === next.height && previous.uiScale === next.uiScale ? previous : next
+            );
+            const reopened = loadRecent(stored);
+            setRecent(
+              (previous) => previous.length === reopened.length && previous.every((entry, index) => entry.room === reopened[index]?.room) ? previous : reopened
             );
           }),
           []
@@ -2296,6 +2452,7 @@ window.__ModuleLoader__.load({
         const [ballPlace, setBallPlace] = (0, import_react4.useState)(
           saved.ballPlace ?? null
         );
+        const [recent, setRecent] = (0, import_react4.useState)(() => loadRecent(saved));
         const [menuOpen, setMenuOpen] = (0, import_react4.useState)(false);
         const configRef = (0, import_react4.useRef)(config);
         const stores = (0, import_react4.useRef)(/* @__PURE__ */ new Map());
@@ -2316,16 +2473,11 @@ window.__ModuleLoader__.load({
             if (disposed) return;
             setConfig(next);
             if (next.boot !== void 0) adoptBoot(next.boot);
-            if (restored.current) return;
-            restored.current = true;
-            if (next.defaultRoom === "" || !next.autoConnect) return;
-            const store = createRoom(next.defaultRoom, { view: "window" });
-            if (store) setOrder((current) => [...current, store.getSnapshot().key]);
           });
           return () => {
             disposed = true;
           };
-        }, []);
+        }, [adoptBoot]);
         (0, import_react4.useEffect)(() => {
           let disposed = false;
           void fetchCredential().then((next) => {
@@ -2348,23 +2500,14 @@ window.__ModuleLoader__.load({
           []
         );
         (0, import_react4.useEffect)(() => {
-          const entries = restoreRooms(saved);
-          if (entries.length === 0) return;
           if (restored.current) return;
+          if (config.defaultRoom === "" && config.autoConnect === false) return;
           restored.current = true;
-          const keys = [];
-          for (const entry of entries) {
-            const store = createRoom(entry.room, {
-              view: asView(entry.view),
-              alias: entry.alias ?? "",
-              liveTitle: entry.liveTitle ?? "",
-              uname: entry.uname ?? "",
-              place: entry.place ?? null
-            });
-            if (store) keys.push(store.getSnapshot().key);
-          }
-          if (keys.length > 0) setOrder(keys);
-        }, []);
+          if (config.defaultRoom === "" || !config.autoConnect) return;
+          const store = createRoom(config.defaultRoom, { view: "window" });
+          if (!store) return;
+          setOrder((current) => [...current, store.getSnapshot().key]);
+        }, [config, createRoom]);
         (0, import_react4.useEffect)(() => {
           const check = async () => {
             const next = await fetchConfig();
@@ -2389,9 +2532,17 @@ window.__ModuleLoader__.load({
             });
           }
           const { room: _room, enabled: _enabled, collapsed: _collapsed, place: _place, ...kept } = loadState();
+          let recent2 = kept.recentRooms;
+          const listed2 = new Set((recent2 ?? []).map((entry) => entry.room));
+          for (const entry of rooms) {
+            if (listed2.has(entry.room)) continue;
+            listed2.add(entry.room);
+            recent2 = withRecentRoom(recent2, entry);
+          }
           saveState({
             ...kept,
             rooms,
+            recentRooms: recent2,
             ballSize: nextSize,
             ballPlace: placeRef.current,
             host: bootSeen.current
@@ -2515,6 +2666,25 @@ window.__ModuleLoader__.load({
           []
         );
         let slot = 0;
+        const candidates = [];
+        const listed = /* @__PURE__ */ new Set();
+        for (const instance of instances) {
+          listed.add(instance.room);
+          candidates.push({
+            room: instance.room,
+            label: instance.alias || instance.liveTitle || instance.uname || "",
+            live: true
+          });
+        }
+        for (const entry of recent) {
+          if (listed.has(entry.room)) continue;
+          listed.add(entry.room);
+          candidates.push({
+            room: entry.room,
+            label: entry.alias || entry.liveTitle || entry.uname || "",
+            live: false
+          });
+        }
         return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
           instances.filter((instance) => instance.view !== "hidden").map((instance) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
             DanmakuWindow,
@@ -2550,6 +2720,8 @@ window.__ModuleLoader__.load({
             {
               t,
               rooms: instances,
+              candidates,
+              configuredRoom: config.defaultRoom,
               size: ballSize,
               uiScale: front.uiScale,
               open: menuOpen,

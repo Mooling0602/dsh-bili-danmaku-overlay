@@ -83,10 +83,30 @@ function TvMark(props: { readonly size: number; readonly color: string }) {
   )
 }
 
+/** A room the menu can offer, whether or not it is monitored right now. */
+export interface RoomCandidate {
+  /** The room id. */
+  readonly room: string
+  /** The label to show, empty when nothing is known yet. */
+  readonly label: string
+  /** Whether this room is monitored right now. */
+  readonly live: boolean
+}
+
 /** Props for the ball. */
 export interface BallProps {
   readonly t: (key: CopyKey) => string
   readonly rooms: readonly RoomInstance[]
+  /**
+   * Rooms to offer for reopening, newest first, whether or not they are live.
+   *
+   * Kept separate from `rooms` because the two answer different questions: `rooms`
+   * is what is monitored now, and this is what this browser has opened before. The
+   * menu pins the room dsh is configured with above both.
+   */
+  readonly candidates: readonly RoomCandidate[]
+  /** The room dsh is configured to open, shown first; empty when unset. */
+  readonly configuredRoom: string
   readonly size: number
   /**
    * Zoom for the menu's contents, as a percentage of their declared size.
@@ -144,6 +164,12 @@ export function FloatingBall(props: BallProps) {
   // to match. Rounding with a floor of one keeps a hairline gap visible at the
   // smallest zoom.
   const ds = (value: number): number => Math.max(1, Math.round(value * (props.uiScale / 100)))
+  // Rooms the menu offers for reopening: everything this browser has opened that is
+  // not monitored right now. The configured room is filtered out because it is
+  // already pinned above the list under its own heading.
+  const reopenable = props.candidates.filter(
+    (entry) => !entry.live && entry.room !== props.configuredRoom,
+  )
   const [idle, setIdle] = useState(false)
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
@@ -358,7 +384,52 @@ export function FloatingBall(props: BallProps) {
           </div>
 
           <div style={{ overflowY: 'auto', padding: `${ds(4)}px 0` }}>
-            {rooms.length === 0 ? (
+            {props.configuredRoom !== '' ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: ds(6),
+                  padding: `${ds(6)}px ${ds(11)}px`,
+                  borderBottom: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.14))',
+                }}
+              >
+                <span
+                  style={{
+                    width: ds(7),
+                    height: ds(7),
+                    borderRadius: 999,
+                    flex: '0 0 auto',
+                    // The configured room is pinned, not monitored, so it carries the
+                    // same tone a connected room would rather than a live colour it
+                    // has not earned.
+                    background: 'var(--dsw-alias-label-tertiary, #999)',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => props.onAddRoom(props.configuredRoom)}
+                  title={t('openRoom')}
+                  style={{
+                    flex: '1 1 auto',
+                    minWidth: 0,
+                    padding: 0,
+                    border: 'none',
+                    background: 'transparent',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    color: 'var(--dsw-alias-label-primary, #222)',
+                    font: 'inherit',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {t('configuredRoom')} #{props.configuredRoom}
+                </button>
+              </div>
+            ) : null}
+            {rooms.length === 0 && props.candidates.length === 0 ? (
               <div
                 style={{
                   padding: `${ds(16)}px ${ds(12)}px`,
@@ -464,6 +535,61 @@ export function FloatingBall(props: BallProps) {
                 </IconButton>
               </div>
             ))}
+            {reopenable.length > 0 ? (
+              <>
+                <div
+                  style={{
+                    padding: `${ds(8)}px ${ds(11)}px ${ds(2)}px`,
+                    fontSize: ds(11),
+                    color: 'var(--dsw-alias-label-tertiary, #999)',
+                  }}
+                >
+                  {t('recentRooms')}
+                </div>
+                {reopenable.map((entry) => (
+                  <div
+                    key={entry.room}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: ds(6),
+                      padding: `${ds(6)}px ${ds(11)}px`,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: ds(7),
+                        height: ds(7),
+                        borderRadius: 999,
+                        flex: '0 0 auto',
+                        background: 'var(--dsw-alias-label-tertiary, #999)',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => props.onAddRoom(entry.room)}
+                      title={t('openRoom')}
+                      style={{
+                        flex: '1 1 auto',
+                        minWidth: 0,
+                        padding: 0,
+                        border: 'none',
+                        background: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        color: 'var(--dsw-alias-label-secondary, #666)',
+                        font: 'inherit',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {entry.label || `#${entry.room}`}
+                    </button>
+                  </div>
+                ))}
+              </>
+            ) : null}
           </div>
 
           <div

@@ -67,6 +67,14 @@ export interface SavedState {
   readonly place?: { readonly x: number; readonly y: number } | null
   /** Every monitored room, in display order. */
   readonly rooms?: readonly SavedRoom[]
+  /**
+   * Rooms this browser has opened before, newest first.
+   *
+   * A history rather than a session: a room removed from monitoring stays here so
+   * it can be reopened from the ball without typing its number again. Reconnecting
+   * is a deliberate act, so a reload never resumes a room that was being watched.
+   */
+  readonly recentRooms?: readonly SavedRoom[]
   /** Ball diameter in pixels. */
   readonly ballSize?: number
   /** Window width in pixels. */
@@ -170,6 +178,32 @@ export function onStateChange(listener: () => void): () => void {
 
 /** Window width a profile starts with before anyone resizes it. */
 export const DEFAULT_WINDOW_WIDTH = 320
+
+/**
+ * How many past rooms the browser remembers.
+ *
+ * The menu is a shortlist, not an archive: beyond a dozen entries the list is
+ * longer than the screen and the rooms a user actually returns to are buried
+ * under ones they opened once.
+ */
+export const RECENT_ROOM_LIMIT = 12
+
+/**
+ * Fold one room into a recent-room list, newest first.
+ *
+ * @param recent - the current history.
+ * @param entry - the room to move to the front.
+ * @returns a new list with no duplicate ids, capped at `RECENT_ROOM_LIMIT`.
+ */
+export function withRecentRoom(
+  recent: readonly SavedRoom[] | undefined,
+  entry: SavedRoom,
+): readonly SavedRoom[] {
+  const room = entry.room.trim()
+  if (room === '') return recent ?? []
+  const rest = (recent ?? []).filter((item) => item.room !== room)
+  return [entry, ...rest].slice(0, RECENT_ROOM_LIMIT)
+}
 
 /** Narrowest window that still fits a nickname, a badge and a message. */
 export const MIN_WINDOW_WIDTH = 240

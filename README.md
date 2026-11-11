@@ -8,7 +8,7 @@ Shows Bilibili live-room danmaku in a floating overlay inside the DSH Web UI. Th
 
 - Live danmaku with automatic reconnect, and a history fallback when the live socket is unavailable
 - Multiple rooms at once, each in its own window
-- A round Bilibili television entry that shows the overall state and the newest danmaku, and opens a menu that manages every room
+- A round Bilibili television entry that shows the overall state and the newest danmaku, and opens a menu that manages every room and reopens any room this browser has connected to before
 - Windows are titled with the room's real title; double-click to rename one temporarily
 - Resize a window from its bottom right corner, or minimize it to its title bar, or fold it back into the ball, none of which stops its stream
 - A room that is not streaming shows "not live" first; press View danmaku to reveal the list and unlock the input

@@ -58,6 +58,9 @@ export type CopyKey =
   | 'stateHistory'
   | 'stateIdle'
   | 'noRooms'
+  | 'recentRooms'
+  | 'configuredRoom'
+  | 'openRoom'
   | 'waitingNew'
   | 'minimizeWindow'
   | 'ungroupAll'
@@ -119,6 +122,9 @@ export const zh: Dictionary = {
   stateHistory: '正在查看历史弹幕',
   stateIdle: '未连接',
   noRooms: '还没有监控中的直播间',
+  recentRooms: '最近连接',
+  configuredRoom: '默认直播间',
+  openRoom: '打开',
   waitingNew: '等待新弹幕…',
   minimizeWindow: '最小化',
   ungroupAll: '全部收到悬浮窗',
@@ -177,6 +183,9 @@ export const en: Dictionary = {
   stateHistory: 'Reading history danmaku',
   stateIdle: 'Not connected',
   noRooms: 'No rooms are being monitored',
+  recentRooms: 'Recently connected',
+  configuredRoom: 'Default room',
+  openRoom: 'Open',
   waitingNew: 'Waiting for new danmaku…',
   minimizeWindow: 'Minimize',
   ungroupAll: 'Put all in the ball',
