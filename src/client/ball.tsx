@@ -88,6 +88,15 @@ export interface BallProps {
   readonly t: (key: CopyKey) => string
   readonly rooms: readonly RoomInstance[]
   readonly size: number
+  /**
+   * Zoom for the menu's contents, as a percentage of their declared size.
+   *
+   * The menu lists the same rooms the windows show, so it follows the same zoom a
+   * window does rather than having a scale of its own. The ball itself does not use
+   * it: the dot is sized by its own diameter, which is what keeps a big ball with
+   * small text from looking like two objects.
+   */
+  readonly uiScale: number
   readonly open: boolean
   readonly onToggleMenu: () => void
   readonly onShowWindow: (key: string) => void
@@ -125,6 +134,16 @@ const MENU_WIDTH = 268
 
 export function FloatingBall(props: BallProps) {
   const { t, rooms, size } = props
+  // The expanded summary is the ball's own label, so every length around it scales
+  // with the dot rather than staying fixed: a pill drawn against a 96px dot with
+  // text and padding sized for a 48px one reads as two mismatched objects. The
+  // ratio is taken against the default diameter, so a default ball is unchanged.
+  const bs = (value: number): number => Math.max(1, Math.round(value * (size / DEFAULT_BALL_SIZE)))
+  // The menu follows the window zoom, not the ball size: it lists the same rooms
+  // the danmaku windows show, so a reader who enlarged one text expects the other
+  // to match. Rounding with a floor of one keeps a hairline gap visible at the
+  // smallest zoom.
+  const ds = (value: number): number => Math.max(1, Math.round(value * (props.uiScale / 100)))
   const [idle, setIdle] = useState(false)
   const [draft, setDraft] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
@@ -269,7 +288,10 @@ export function FloatingBall(props: BallProps) {
    * The clamping is what makes this safe on a small screen: when neither side has
    * room for the panel, it is pinned inside the safe area instead of overflowing.
    */
-  const menuWidth = Math.min(MENU_WIDTH, viewport.w - SAFE * 2)
+  // The preferred width scales with the zoom, so a room named in text the reader
+  // enlarged is not cut off at a width sized for the default one. The safe area and
+  // the viewport still win, which is what keeps a 300% menu inside a small screen.
+  const menuWidth = Math.min(ds(MENU_WIDTH), viewport.w - SAFE * 2)
   // Clamp to the safe area on BOTH sides: a ball parked at the very edge would
   // otherwise open a menu that starts off screen.
   const desired = side === 'left' ? anchor.x + size - menuWidth : anchor.x
@@ -281,12 +303,15 @@ export function FloatingBall(props: BallProps) {
   // grow to its natural height without ever needing to know that height here.
   const below = anchor.y + size / 2 < viewport.h / 2
   const menuVertical = below
-    ? { top: anchor.y + size + 8 }
-    : { bottom: viewport.h - anchor.y + 8 }
+    ? { top: anchor.y + size + ds(8) }
+    : { bottom: viewport.h - anchor.y + ds(8) }
   // Whichever direction it opens, it stays inside the safe area.
   const menuMaxHeight = below
-    ? Math.max(120, viewport.h - SAFE - (anchor.y + size + 8))
-    : Math.max(120, anchor.y - 8 - SAFE)
+    ? Math.max(ds(120), viewport.h - SAFE - (anchor.y + size + ds(8)))
+    : Math.max(ds(120), anchor.y - ds(8) - SAFE)
+  // The height cap scales with the zoom too, so a zoomed menu scrolls inside the
+  // same footprint instead of being cut off at a height sized for the default one.
+  const menuHeightCap = Math.min(menuMaxHeight, ds(520))
 
   return (
     <div
@@ -309,22 +334,22 @@ export function FloatingBall(props: BallProps) {
             ...menuVertical,
             pointerEvents: 'auto',
             width: menuWidth,
-            maxHeight: `min(${Math.round(menuMaxHeight)}px, 520px)`,
+            maxHeight: Math.round(menuHeightCap),
             display: 'flex',
             flexDirection: 'column',
-            borderRadius: 12,
+            borderRadius: ds(12),
             border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))',
             background: 'var(--dsw-alias-bg-overlay, #fff)',
             boxShadow: '0 10px 32px rgba(0,0,0,.18)',
-            font: '12px/1.4 system-ui, -apple-system, sans-serif',
+            font: `${ds(12)}px/1.4 system-ui, -apple-system, sans-serif`,
             overflow: 'hidden',
           }}
         >
           <div
             style={{
-              padding: '9px 11px',
+              padding: `${ds(9)}px ${ds(11)}px`,
               borderBottom: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))',
-              fontSize: 12,
+              fontSize: ds(12),
               fontWeight: 600,
               color: 'var(--dsw-alias-label-primary, #222)',
             }}
@@ -332,11 +357,11 @@ export function FloatingBall(props: BallProps) {
             {t('rooms')}
           </div>
 
-          <div style={{ overflowY: 'auto', padding: '4px 0' }}>
+          <div style={{ overflowY: 'auto', padding: `${ds(4)}px 0` }}>
             {rooms.length === 0 ? (
               <div
                 style={{
-                  padding: '16px 12px',
+                  padding: `${ds(16)}px ${ds(12)}px`,
                   textAlign: 'center',
                   color: 'var(--dsw-alias-label-tertiary, #999)',
                 }}
@@ -349,14 +374,14 @@ export function FloatingBall(props: BallProps) {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 11px',
+                  gap: ds(6),
+                  padding: `${ds(6)}px ${ds(11)}px`,
                 }}
               >
                 <span
                   style={{
-                    width: 7,
-                    height: 7,
+                    width: ds(7),
+                    height: ds(7),
                     borderRadius: 999,
                     flex: '0 0 auto',
                     background: stateTone(room.state),
@@ -382,9 +407,9 @@ export function FloatingBall(props: BallProps) {
                     style={{
                       flex: '1 1 auto',
                       minWidth: 0,
-                      padding: '2px 6px',
-                      fontSize: 12,
-                      borderRadius: 6,
+                      padding: `${ds(2)}px ${ds(6)}px`,
+                      fontSize: ds(12),
+                      borderRadius: ds(6),
                       border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
                       background: 'var(--dsw-alias-bg-layer-2, transparent)',
                       color: 'var(--dsw-alias-label-primary, #222)',
@@ -416,6 +441,7 @@ export function FloatingBall(props: BallProps) {
                 )}
                 <IconButton
                   label={room.view === 'hidden' ? t('showWindow') : t('hideWindow')}
+                  scale={ds}
                   onClick={() => {
                     if (room.view === 'hidden') props.onShowWindow(room.key)
                     else props.onHideWindow(room.key)
@@ -425,6 +451,7 @@ export function FloatingBall(props: BallProps) {
                 </IconButton>
                 <IconButton
                   label={t('rename')}
+                  scale={ds}
                   onClick={() => {
                     setEditing(room.key)
                     setAliasDraft(room.alias)
@@ -432,7 +459,7 @@ export function FloatingBall(props: BallProps) {
                 >
                   <EditIcon />
                 </IconButton>
-                <IconButton label={t('removeRoom')} onClick={() => props.onRemove(room.key)}>
+                <IconButton label={t('removeRoom')} scale={ds} onClick={() => props.onRemove(room.key)}>
                   <CloseIcon />
                 </IconButton>
               </div>
@@ -442,8 +469,8 @@ export function FloatingBall(props: BallProps) {
           <div
             style={{
               display: 'flex',
-              gap: 6,
-              padding: '8px 11px',
+              gap: ds(6),
+              padding: `${ds(8)}px ${ds(11)}px`,
               borderTop: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))',
             }}
           >
@@ -460,9 +487,9 @@ export function FloatingBall(props: BallProps) {
               style={{
                 flex: '1 1 auto',
                 minWidth: 0,
-                padding: '4px 8px',
-                fontSize: 12,
-                borderRadius: 7,
+                padding: `${ds(4)}px ${ds(8)}px`,
+                fontSize: ds(12),
+                borderRadius: ds(7),
                 border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
                 background: 'var(--dsw-alias-bg-layer-2, transparent)',
                 color: 'var(--dsw-alias-label-primary, #222)',
@@ -477,9 +504,9 @@ export function FloatingBall(props: BallProps) {
               }}
               style={{
                 flex: '0 0 auto',
-                padding: '4px 10px',
-                fontSize: 12,
-                borderRadius: 7,
+                padding: `${ds(4)}px ${ds(10)}px`,
+                fontSize: ds(12),
+                borderRadius: ds(7),
                 border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
                 background: 'transparent',
                 color: 'var(--dsw-alias-label-primary, #222)',
@@ -495,12 +522,12 @@ export function FloatingBall(props: BallProps) {
             <div
               style={{
                 display: 'flex',
-                gap: 6,
-                padding: '0 11px 9px',
+                gap: ds(6),
+                padding: `0 ${ds(11)}px ${ds(9)}px`,
               }}
             >
-              <TextButton onClick={props.onShowAll}>{t('showWindow')}</TextButton>
-              <TextButton onClick={props.onHideAll}>{t('ungroupAll')}</TextButton>
+              <TextButton label={t('showWindow')} onClick={props.onShowAll} scale={ds} />
+              <TextButton label={t('ungroupAll')} onClick={props.onHideAll} scale={ds} />
             </div>
           ) : null}
         </div>
@@ -529,7 +556,7 @@ export function FloatingBall(props: BallProps) {
           // otherwise the summary grows between the icon and the border and pushes
           // the icon halfway across the pill.
           flexDirection: side === 'left' ? 'row-reverse' : 'row',
-          gap: expanded ? 8 : 0,
+          gap: expanded ? bs(8) : 0,
           height: size,
           // A pill that would run past the edge is clamped to the safe area, which
           // keeps the summary readable on a phone instead of clipping it.
@@ -540,7 +567,7 @@ export function FloatingBall(props: BallProps) {
           // No padding on the icon's side: the glyph is already centred inside a
           // full `size` box, so its own letterboxing is the gap to the pill edge.
           // Only the summary needs breathing room against the rounded end.
-          padding: expanded ? (side === 'left' ? '0 0 0 14px' : '0 14px 0 0') : 0,
+          padding: expanded ? (side === 'left' ? `0 0 0 ${bs(14)}px` : `0 ${bs(14)}px 0 0`) : 0,
           borderRadius: 999,
           border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
           background: 'var(--dsw-alias-bg-overlay, #fff)',
@@ -585,22 +612,31 @@ export function FloatingBall(props: BallProps) {
               flexDirection: 'column',
               alignItems: 'flex-start',
               gap: 1,
-              font: '12px/1.25 system-ui, -apple-system, sans-serif',
+              // The summary is the ball's own label, so it follows the ball: a larger
+              // dot carries a larger summary, and the two always look like one object.
+              // The ratio is taken against the default diameter, which keeps a default
+              // ball drawing its text at the size it was designed for.
+              font: `${Math.max(9, bs(12))}px/1.25 system-ui, -apple-system, sans-serif`,
             }}
           >
             <span
               style={{
-                maxWidth: 210,
+                maxWidth: bs(210),
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
                 color: 'var(--dsw-alias-label-secondary, #888)',
-                fontSize: 11,
+                fontSize: Math.max(9, bs(11)),
               }}
             >
               {newest ? `${newest.user}：${summarise(newest.text)}` : t('waitingNew')}
             </span>
-            <span style={{ color: 'var(--dsw-alias-label-primary, #222)', fontSize: 12 }}>
+            <span
+              style={{
+                color: 'var(--dsw-alias-label-primary, #222)',
+                fontSize: Math.max(9, bs(12)),
+              }}
+            >
               {rooms.length === 0 ? t('noRooms') : `${rooms.length} ${t('roomCount')}`}
             </span>
           </span>
@@ -635,14 +671,16 @@ function newestRow(rooms: readonly RoomInstance[]): { user: string; text: string
 /**
  * A small square icon button.
  *
- * @param props - the label and the click handler.
+ * @param props - the label, the click handler and the menu's zoom.
  * @returns the button.
  */
 function IconButton(props: {
   readonly label: string
   readonly onClick: () => void
+  readonly scale: (value: number) => number
   readonly children: React.ReactNode
 }) {
+  const sp = props.scale
   return (
     <button
       type="button"
@@ -651,15 +689,15 @@ function IconButton(props: {
       aria-label={props.label}
       style={{
         flex: '0 0 auto',
-        width: 20,
-        height: 20,
+        width: sp(20),
+        height: sp(20),
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: 0,
-        fontSize: 12,
+        fontSize: sp(12),
         lineHeight: 1,
-        borderRadius: 5,
+        borderRadius: sp(5),
         border: '1px solid transparent',
         background: 'transparent',
         color: 'var(--dsw-alias-label-secondary, #666)',
@@ -674,26 +712,31 @@ function IconButton(props: {
 /**
  * A borderless text button.
  *
- * @param props - the label and the click handler.
+ * @param props - the label, the click handler and the menu's zoom.
  * @returns the button.
  */
-function TextButton(props: { readonly onClick: () => void; readonly children: React.ReactNode }) {
+function TextButton(props: {
+  readonly label: string
+  readonly onClick: () => void
+  readonly scale: (value: number) => number
+}) {
+  const sp = props.scale
   return (
     <button
       type="button"
       onClick={props.onClick}
       style={{
         flex: '1 1 auto',
-        padding: '3px 8px',
-        fontSize: 11,
-        borderRadius: 6,
+        padding: `${sp(3)}px ${sp(8)}px`,
+        fontSize: sp(11),
+        borderRadius: sp(6),
         border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))',
         background: 'transparent',
         color: 'var(--dsw-alias-label-secondary, #666)',
         cursor: 'pointer',
       }}
     >
-      {props.children}
+      {props.label}
     </button>
   )
 }

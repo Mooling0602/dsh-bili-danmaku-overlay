@@ -9,6 +9,15 @@
 /** Where the overlay persists its layout choices. */
 const STORAGE_KEY = 'dsh-bili-danmaku-overlay'
 
+/**
+ * Event raised in this document after a layout write.
+ *
+ * The DOM gives no notification for a write made by the document itself, so the
+ * settings page and the overlay, which share one document, could not otherwise
+ * see each other's changes.
+ */
+const STATE_EVENT = 'dsh-bili-danmaku-overlay:state'
+
 /** Base path of the Host routes. */
 const BASE = '/bili-danmaku-overlay'
 
@@ -60,8 +69,22 @@ export interface SavedState {
   readonly rooms?: readonly SavedRoom[]
   /** Ball diameter in pixels. */
   readonly ballSize?: number
+  /** Window width in pixels. */
+  readonly windowWidth?: number
+  /** Window height in pixels; a minimized window ignores it. */
+  readonly windowHeight?: number
   /** Where the ball sits, in viewport coordinates; null keeps the default corner. */
   readonly ballPlace?: { readonly x: number; readonly y: number } | null
+  /**
+   * Zoom applied to the contents of a window, as a percentage.
+   *
+   * It scales what is drawn inside the card, never the card itself: the window
+   * size stays a dragged length, so the two settings stay independent. The
+   * default of 100 draws at the size CSS declares, which is already multiplied by
+   * the browser's own page zoom, and that is what keeps an untouched profile
+   * following the page.
+   */
+  readonly uiScale?: number
   /**
    * Identifies the Host process that wrote the state.
    *
@@ -109,7 +132,12 @@ export function loadState(): SavedState {
 }
 
 /**
- * Persist the layout.
+ * Persist the layout and announce the write.
+ *
+ * `localStorage.setItem` raises a `storage` event in every other document of the
+ * origin but never in the one that wrote it, and the settings page and the
+ * overlay share one document. Dispatching our own event is what lets a slider
+ * take effect on the running overlay without a reload.
  *
  * @param next - the state to store.
  */
@@ -119,6 +147,91 @@ export function saveState(next: SavedState): void {
   } catch {
     /* storage may be unavailable in a private window */
   }
+  window.dispatchEvent(new Event(STATE_EVENT))
+}
+
+/**
+ * Subscribe to layout writes made by this document or another one.
+ *
+ * @param listener - called after a write has landed in storage.
+ * @returns the unsubscribe function.
+ */
+export function onStateChange(listener: () => void): () => void {
+  const onStorage = (event: StorageEvent): void => {
+    if (event.key === null || event.key === STORAGE_KEY) listener()
+  }
+  window.addEventListener(STATE_EVENT, listener)
+  window.addEventListener('storage', onStorage)
+  return () => {
+    window.removeEventListener(STATE_EVENT, listener)
+    window.removeEventListener('storage', onStorage)
+  }
+}
+
+/** Window width a profile starts with before anyone resizes it. */
+export const DEFAULT_WINDOW_WIDTH = 320
+
+/** Narrowest window that still fits a nickname, a badge and a message. */
+export const MIN_WINDOW_WIDTH = 240
+
+/** Widest window allowed, so one card cannot cover the whole viewport. */
+export const MAX_WINDOW_WIDTH = 720
+
+/** Window height a profile starts with before anyone resizes it. */
+export const DEFAULT_WINDOW_HEIGHT = 300
+
+/** Shortest window that still shows a few rows beside the reply row. */
+export const MIN_WINDOW_HEIGHT = 180
+
+/** Tallest window allowed, leaving room for the page around it. */
+export const MAX_WINDOW_HEIGHT = 760
+
+/** Zoom a profile starts with, which draws the contents at their declared size. */
+export const DEFAULT_UI_SCALE = 100
+
+/**
+ * Smallest accepted zoom.
+ *
+ * The range is deliberately wider than the comfortable one. A small number is a
+ * legitimate answer for a packed screen, so the slider allows it and the settings
+ * page warns instead of refusing the value.
+ */
+export const MIN_UI_SCALE = 50
+
+/** Largest accepted zoom, symmetric with {@link MIN_UI_SCALE}. */
+export const MAX_UI_SCALE = 300
+
+/** Above this zoom the settings page warns that rows become tall and rare. */
+export const COMFORTABLE_UI_SCALE_MAX = 150
+
+/** Below this zoom the settings page warns that text becomes hard to read. */
+export const COMFORTABLE_UI_SCALE_MIN = 80
+
+/**
+ * Clamp a stored zoom into its allowed range.
+ *
+ * @param value - a possibly stored zoom, as a percentage.
+ * @returns the zoom, rounded to a whole percent.
+ */
+export function clampScale(value: unknown): number {
+  const scale = Number(value)
+  if (!Number.isFinite(scale)) return DEFAULT_UI_SCALE
+  return Math.min(MAX_UI_SCALE, Math.max(MIN_UI_SCALE, Math.round(scale)))
+}
+
+/**
+ * Clamp a stored pixel length into its allowed range.
+ *
+ * @param value - a possibly stored length.
+ * @param fallback - the value to use when nothing usable is stored.
+ * @param min - the smallest accepted length.
+ * @param max - the largest accepted length.
+ * @returns the length, rounded and clamped.
+ */
+export function clampLength(value: unknown, fallback: number, min: number, max: number): number {
+  const size = Number(value)
+  if (!Number.isFinite(size)) return fallback
+  return Math.min(max, Math.max(min, Math.round(size)))
 }
 
 /**

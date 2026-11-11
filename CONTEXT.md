@@ -26,14 +26,14 @@ The split matters in practice: a Host change reaches the running process after a
 | `src/poller.ts` | `Map<number, RoomLoop>`: which rooms are connected, history polling, stats polling, fan-out to subscribers. |
 | `src/routes.ts` | Every HTTP route under `ROUTE_PREFIX`. |
 | `src/types.ts` | Shared types, including the message row the page renders. |
-| `src/client/api.ts` | The page's typed wrappers over those routes, plus the localStorage state format. |
+| `src/client/api.ts` | The page's typed wrappers over those routes, the localStorage state format, the window size bounds and `clampLength`, and the `saveState` / `onStateChange` event pair that carries a write to the running overlay. |
 | `src/client/rooms.ts` | `RoomStore`: one room's page-side state, its own connection, history merge, dedup, title, alias, view, position. Also holds `stateTone` and `aggregateState`. |
 | `src/client/overlay.tsx` | The container: restores rooms, creates stores, persists state, renders every window and the ball. |
-| `src/client/window.tsx` | One floating danmaku window. |
+| `src/client/window.tsx` | One floating danmaku window: title bar, message list, reply row, the offline veil, the resize grip and the status dot tooltip. |
 | `src/client/ball.tsx` | The Bilibili TV ball and its room-management menu. |
-| `src/client/config-page.tsx` | The plugin settings page. |
+| `src/client/config-page.tsx` | The plugin settings page, including the 前端设置 block at the end of its form that edits the browser-owned ball size. |
 | `src/client/copy.ts` | The `zh` and `en` dictionaries and the `CopyKey` union. |
-| `src/client/index.tsx` | Registers the overlay into `shell.overlay` and the settings page into the plugin settings row. |
+| `src/client/index.tsx` | Registers the overlay into `shell.overlay` and the settings page into `plugins.bundle.config`. |
 | `build.mjs` | esbuild: `src/client/index.tsx` to `client.js` (IIFE), `host.ts` to `index.js` (ESM). |
 | `cordis.patch.yml` | The bundle patch that inserts this plugin into a profile. |
 
@@ -137,11 +137,65 @@ Rows are deduplicated on the stable message id from upstream, not on text or tim
 
 ### Persistence
 
-The page keeps one document in localStorage: the room list, per-room view, alias and position, the ball size, the ball position, and the Host `boot` id it last saw.
+The page keeps one document in localStorage: the room list, per-room view, alias and position, the ball size, the window size, the ball position, and the Host `boot` id it last saw.
 
 - A **temporary room title** (the alias) survives a page reload and is dropped when the stored `boot` differs from the one `/api/config` reports, which is to say after a `dsh` restart. The first sighting only records the id.
 - The legacy single-room shape (`room`, `enabled`, `collapsed`, `place`) is still read and folded into the list form, so an upgrade does not lose the room someone was watching. This is a bounded transition; see `AGENTS.md` section 5.
-- `saveState` replaces the whole document rather than merging into it.
+- `saveState` replaces the whole document rather than merging into it, so a caller that only means to change one field reads the document, spreads it, and writes it back. **A field that a write forgets is a field it erases**, which is why `persist` spreads the stored document instead of rebuilding it field by field: a rebuild silently dropped `uiScale` on every drag and reset the zoom to its default. The spread is not unconditional, because the single-room save shape (`room`, `enabled`, `collapsed`, `place`) is read once and must not be written back: `enabled` is what folds that room in, so keeping it alive would bring a removed room back on the next load. `persist` omits those four while keeping everything else.
+- `persist` reads the settings it does not own from storage rather than from its own render scope for the same reason the spread exists: the settings page writes those fields directly, and a stale copy in the overlay would overwrite a slider the user had just moved.
+- `saveState` also dispatches `dsh-bili-danmaku-overlay:state` on `window`. `localStorage.setItem` raises a `storage` event in every other document but never in the one that wrote it, and the settings page and the overlay share one document, so the write has to announce itself. `onStateChange` subscribes to that event and to `storage`, which is what makes a front-end setting take effect on the running overlay without a reload.
+
+### Presentation settings the browser owns
+
+The ball diameter is not in the Host schema. It is a taste setting that belongs to the screen the overlay sits on, it needs no server round trip, and a per-browser value is the honest model, because the same account on a small laptop and on a large monitor wants different values. It lives under `ballSize` in the same document as the layout, and the plugin page renders it in a **前端设置** block at the end of the configuration form rather than as one of the form's own rows, because the form's save button and revision fence would misdescribe a value the Host never stores.
+
+The block is part of `ConfigPage`, which is registered on `plugins.bundle.config`. That slot renders above the "包含的组件" list, which is what puts 前端设置 before it. `plugins.detail.section` would have placed a section after the source block instead, and it has no key domain, so every entry there renders on every package's page and has to filter on the `subject` itself.
+
+The window size has no control in the section: it is dragged from the window's bottom right grip and stored as `windowWidth` and `windowHeight` next to `ballSize`. It still appears in the section as a read-only 弹幕窗口大小 row, because the reset has to cover it and a value the reset changes must be visible somewhere.
+
+**The reset button restores every front-end value at once**, which is the ball size, both window dimensions and the window's internal zoom. It is disabled while all of them already equal their defaults, so the control doubles as the answer to whether this section has been touched. A reset that restored the ball but left a hand-dragged window would not restore the shipped layout, which is the only thing the button promises.
+
+The bounds are `MIN_WINDOW_WIDTH` 240 to `MAX_WINDOW_WIDTH` 720 and `MIN_WINDOW_HEIGHT` 180 to `MAX_WINDOW_HEIGHT` 760, with defaults of 320 by 300. `clampLength` rounds and clamps every stored or dragged value, so a hand-edited localStorage entry cannot produce an unusable card.
+
+### The window's internal zoom
+
+`uiScale` is a percentage, 50 to 300, defaulting to `DEFAULT_UI_SCALE` 100. It scales the contents of a danmaku window and nothing else: fonts, gaps, padding, the status dot, the icon buttons, the grip and the row line height are all multiplied by it, while the card's own width and height keep obeying the drag. The two settings are separate on purpose, so a reader can enlarge the text without the window covering more of the page. The ball's menu applies the same ratio, so the room list and the windows always agree on text size.
+
+The scaling multiplies each interior length rather than putting a CSS `zoom` or a `transform` on the card. A zoom on the card would rescale its own `position: fixed` offsets, so a drag would report one position and the stored layout would mean another, and the resize grip would measure a length the user did not ask for. `px` keeps every scaled value a whole pixel with a floor of one, so a hairline gap never collapses at a small zoom.
+
+At 100 the contents draw at the size CSS declares, which the browser's own page zoom already multiplies, so an untouched profile follows the page. The range is wider than the comfortable one on purpose: `COMFORTABLE_UI_SCALE_MIN` 80 and `COMFORTABLE_UI_SCALE_MAX` 150 only choose which hint the settings row prints, and an extreme value warns rather than being refused.
+
+Two parts of the card cannot scale freely, because the two settings are independent and a 240px window at 300% cannot fit chrome drawn at three times its size. The icon buttons shrink to about a third of their drawn width rather than overflowing the hidden edge, which keeps the close button reachable in a narrow card, and the list carries a percentage `minHeight` rather than a scaled pixel floor, so a short card never pushes the reply row out of view. The minimization step scales with the title bar it has to clear.
+
+**The ball's menu follows `uiScale`, not the ball diameter.** 正在监控弹幕的直播间 lists the same rooms the windows show, so a reader who enlarged one text expects the other to match, and a menu drawn at 100% beside a 300% window would read as a bug rather than as a setting. Its width, height cap, padding, row gaps, status dots and buttons all go through the same ratio. The width and height cap are still clamped by the viewport and the safe area afterwards, so a 300% menu on a phone scrolls inside the screen rather than growing off it.
+
+The ball's own expanded summary is the opposite case and scales with `size` instead. The dot is sized by its own diameter slider, and a summary drawn at the zoom of the windows would leave a 96px dot carrying 12px text, which reads as two objects rather than one control. So `bs` follows the diameter and `ds` follows the zoom, and the two are deliberately separate.
+
+### Resizing
+
+**A window is resized from its bottom right grip.** The gesture is held in state for the same reason the drag position is: a new danmaku re-renders the card continuously, and a size written only to the DOM would be reset from the props on the next render. The grip reports only the release, because a per-frame callback would write to storage on every pointer move.
+
+- **The size is shared by every room window.** One size rather than one per room, because the windows are read at a glance and a different size per room would make the stack look accidental.
+- **A minimized window ignores the stored height.** It is its title bar, so a stored height would leave an empty card hanging below it. It keeps the stored width, and it cannot be resized at all.
+
+### The offline veil
+
+**A room that is not streaming shows a veil instead of its danmaku.** The message list is replaced by the room's own notice and a 查看弹幕 button, and the reply input carries the same text as its placeholder and is disabled. Pressing the button reveals the list and releases the input; sending is not restricted further once it is released, because an offline room still accepts a danmaku. The revealed state is component state and is deliberately not persisted, so a reload puts the veil back.
+
+The veil reads `instance.state === 'offline'`, the same value the status dot uses, so the two can never disagree about one room.
+
+### The status dot
+
+The dot's `<span>` carries a `title`, which is the browser's own tooltip. The colour is the state's tone and the text says which of the five situations the room is in, because two of them share a tone.
+
+| Situation | `state` | Dot | Tooltip |
+| --- | --- | --- | --- |
+| Not streaming, veil up | `offline` | grey | 未开播 |
+| Not streaming, danmaku revealed | `offline` | grey | 未开播（正在查看弹幕） |
+| Connection failed | `error` | red | 连接失败 |
+| Reading history, socket not up yet | `connecting`, `reconnecting` | orange | 正在查看历史弹幕 |
+| Streaming and connected | `live` | green | 已连接 |
+| No room connected | `idle` | grey | 未连接 |
 
 ### Layout rules that are easy to break
 

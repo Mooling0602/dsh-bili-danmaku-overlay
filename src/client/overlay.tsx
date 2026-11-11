@@ -28,9 +28,18 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 
 import type { CopyKey, Dictionary } from './copy.ts'
 import {
+  clampLength,
+  clampScale,
+  DEFAULT_WINDOW_HEIGHT,
+  DEFAULT_WINDOW_WIDTH,
   fetchConfig,
   fetchCredential,
   loadState,
+  MAX_WINDOW_HEIGHT,
+  MAX_WINDOW_WIDTH,
+  MIN_WINDOW_HEIGHT,
+  MIN_WINDOW_WIDTH,
+  onStateChange,
   saveState,
   sendReply,
   type Credential,
@@ -127,7 +136,36 @@ export function Overlay(props: OverlayProps) {
     autoConnect: false,
   })
   const [credential, setCredential] = useState<Credential | null>(null)
-  const [ballSize] = useState<number>(clampBall(saved.ballSize))
+  /**
+   * Browser-owned presentation settings.
+   *
+   * Read from storage and re-read whenever it changes, because the settings page
+   * writes these directly. Keeping them in state rather than reading on render
+   * gives the overlay a value that is stable between writes and lets a slider
+   * take effect without a reload.
+   */
+  const [front, setFront] = useState(() => readFront(saved))
+
+  useEffect(
+    () =>
+      onStateChange(() => {
+        const next = readFront(loadState())
+        // Returning the previous object when nothing relevant moved keeps the
+        // overlay from re-rendering on the many writes that only touch rooms.
+        setFront((previous) =>
+          previous.ballSize === next.ballSize &&
+          previous.width === next.width &&
+          previous.height === next.height &&
+          previous.uiScale === next.uiScale
+            ? previous
+            : next,
+        )
+      }),
+    [],
+  )
+
+  const ballSize = front.ballSize
+  const windowSize = { width: front.width, height: front.height }
   const [ballPlace, setBallPlace] = useState<{ x: number; y: number } | null>(
     saved.ballPlace ?? null,
   )
@@ -279,7 +317,19 @@ export function Overlay(props: OverlayProps) {
         place: snapshot.place,
       })
     }
+    // Spread the stored document rather than rebuilding it field by field, because
+    // `saveState` replaces the whole document and a field this function forgot would
+    // be erased. The settings page owns several of those fields, and reading them
+    // back also beats holding a copy here, because a stale copy would overwrite a
+    // slider the user has just moved.
+    //
+    // The four leading properties are the single-room save shape, which is read once
+    // and must not be written back: `enabled` is what folds that room in, so keeping
+    // it alive would bring a removed room back on the next load. Dropping it here is
+    // what ends the transition.
+    const { room: _room, enabled: _enabled, collapsed: _collapsed, place: _place, ...kept } = loadState()
     saveState({
+      ...kept,
       rooms,
       ballSize: nextSize,
       ballPlace: placeRef.current,
@@ -472,12 +522,19 @@ export function Overlay(props: OverlayProps) {
           follow={instance.follow}
           slot={instance.place === null && instance.view === 'minimized' ? slot++ : 0}
           ballSize={ballSize}
+          width={windowSize.width}
+          height={windowSize.height}
+          uiScale={front.uiScale}
+          onResizeEnd={(size) => {
+            saveState({ ...loadState(), windowWidth: size.width, windowHeight: size.height })
+          }}
         />
       ))}
       <FloatingBall
         t={t}
         rooms={instances}
         size={ballSize}
+        uiScale={front.uiScale}
         open={menuOpen}
         onToggleMenu={() => setMenuOpen((value) => !value)}
         onShowWindow={(key) => setView(key, 'window')}
@@ -505,6 +562,29 @@ export function Overlay(props: OverlayProps) {
 function clampBall(value: number | undefined): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_BALL_SIZE
   return Math.min(MAX_BALL_SIZE, Math.max(MIN_BALL_SIZE, Math.round(value)))
+}
+
+/** Presentation settings the browser owns, already clamped. */
+interface FrontSettings {
+  readonly ballSize: number
+  readonly width: number
+  readonly height: number
+  readonly uiScale: number
+}
+
+/**
+ * Read the browser-owned presentation settings out of a stored state.
+ *
+ * @param saved - the stored state.
+ * @returns the settings, with every value clamped into its allowed range.
+ */
+function readFront(saved: SavedState): FrontSettings {
+  return {
+    ballSize: clampBall(saved.ballSize),
+    width: clampLength(saved.windowWidth, DEFAULT_WINDOW_WIDTH, MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH),
+    height: clampLength(saved.windowHeight, DEFAULT_WINDOW_HEIGHT, MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT),
+    uiScale: clampScale(saved.uiScale),
+  }
 }
 
 /** Dictionary shape the slot expects. */

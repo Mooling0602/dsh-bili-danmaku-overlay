@@ -49,6 +49,7 @@ window.__ModuleLoader__.load({
 
       // src/client/api.ts
       var STORAGE_KEY = "dsh-bili-danmaku-overlay";
+      var STATE_EVENT = "dsh-bili-danmaku-overlay:state";
       var BASE = "/bili-danmaku-overlay";
       function loadState() {
         try {
@@ -65,6 +66,39 @@ window.__ModuleLoader__.load({
           window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
         } catch {
         }
+        window.dispatchEvent(new Event(STATE_EVENT));
+      }
+      function onStateChange(listener) {
+        const onStorage = (event) => {
+          if (event.key === null || event.key === STORAGE_KEY) listener();
+        };
+        window.addEventListener(STATE_EVENT, listener);
+        window.addEventListener("storage", onStorage);
+        return () => {
+          window.removeEventListener(STATE_EVENT, listener);
+          window.removeEventListener("storage", onStorage);
+        };
+      }
+      var DEFAULT_WINDOW_WIDTH = 320;
+      var MIN_WINDOW_WIDTH = 240;
+      var MAX_WINDOW_WIDTH = 720;
+      var DEFAULT_WINDOW_HEIGHT = 300;
+      var MIN_WINDOW_HEIGHT = 180;
+      var MAX_WINDOW_HEIGHT = 760;
+      var DEFAULT_UI_SCALE = 100;
+      var MIN_UI_SCALE = 50;
+      var MAX_UI_SCALE = 300;
+      var COMFORTABLE_UI_SCALE_MAX = 150;
+      var COMFORTABLE_UI_SCALE_MIN = 80;
+      function clampScale(value) {
+        const scale = Number(value);
+        if (!Number.isFinite(scale)) return DEFAULT_UI_SCALE;
+        return Math.min(MAX_UI_SCALE, Math.max(MIN_UI_SCALE, Math.round(scale)));
+      }
+      function clampLength(value, fallback, min, max) {
+        const size = Number(value);
+        if (!Number.isFinite(size)) return fallback;
+        return Math.min(max, Math.max(min, Math.round(size)));
       }
       async function fetchConfig() {
         try {
@@ -531,6 +565,8 @@ window.__ModuleLoader__.load({
       var MENU_WIDTH = 268;
       function FloatingBall(props) {
         const { t, rooms, size } = props;
+        const bs = (value) => Math.max(1, Math.round(value * (size / DEFAULT_BALL_SIZE)));
+        const ds = (value) => Math.max(1, Math.round(value * (props.uiScale / 100)));
         const [idle, setIdle] = (0, import_react.useState)(false);
         const [draft, setDraft] = (0, import_react.useState)("");
         const [editing, setEditing] = (0, import_react.useState)(null);
@@ -607,12 +643,13 @@ window.__ModuleLoader__.load({
         const anchor = at ?? { x: viewport.w - size - SAFE, y: SAFE };
         const side = unfold(anchor);
         const expanded = !collapse && !dragging;
-        const menuWidth = Math.min(MENU_WIDTH, viewport.w - SAFE * 2);
+        const menuWidth = Math.min(ds(MENU_WIDTH), viewport.w - SAFE * 2);
         const desired = side === "left" ? anchor.x + size - menuWidth : anchor.x;
         const menuLeft = Math.max(SAFE, Math.min(viewport.w - SAFE - menuWidth, desired));
         const below = anchor.y + size / 2 < viewport.h / 2;
-        const menuVertical = below ? { top: anchor.y + size + 8 } : { bottom: viewport.h - anchor.y + 8 };
-        const menuMaxHeight = below ? Math.max(120, viewport.h - SAFE - (anchor.y + size + 8)) : Math.max(120, anchor.y - 8 - SAFE);
+        const menuVertical = below ? { top: anchor.y + size + ds(8) } : { bottom: viewport.h - anchor.y + ds(8) };
+        const menuMaxHeight = below ? Math.max(ds(120), viewport.h - SAFE - (anchor.y + size + ds(8))) : Math.max(ds(120), anchor.y - ds(8) - SAFE);
+        const menuHeightCap = Math.min(menuMaxHeight, ds(520));
         return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
           "div",
           {
@@ -636,14 +673,14 @@ window.__ModuleLoader__.load({
                     ...menuVertical,
                     pointerEvents: "auto",
                     width: menuWidth,
-                    maxHeight: `min(${Math.round(menuMaxHeight)}px, 520px)`,
+                    maxHeight: Math.round(menuHeightCap),
                     display: "flex",
                     flexDirection: "column",
-                    borderRadius: 12,
+                    borderRadius: ds(12),
                     border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))",
                     background: "var(--dsw-alias-bg-overlay, #fff)",
                     boxShadow: "0 10px 32px rgba(0,0,0,.18)",
-                    font: "12px/1.4 system-ui, -apple-system, sans-serif",
+                    font: `${ds(12)}px/1.4 system-ui, -apple-system, sans-serif`,
                     overflow: "hidden"
                   },
                   children: [
@@ -651,20 +688,20 @@ window.__ModuleLoader__.load({
                       "div",
                       {
                         style: {
-                          padding: "9px 11px",
+                          padding: `${ds(9)}px ${ds(11)}px`,
                           borderBottom: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))",
-                          fontSize: 12,
+                          fontSize: ds(12),
                           fontWeight: 600,
                           color: "var(--dsw-alias-label-primary, #222)"
                         },
                         children: t("rooms")
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { style: { overflowY: "auto", padding: "4px 0" }, children: rooms.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("div", { style: { overflowY: "auto", padding: `${ds(4)}px 0` }, children: rooms.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
                       "div",
                       {
                         style: {
-                          padding: "16px 12px",
+                          padding: `${ds(16)}px ${ds(12)}px`,
                           textAlign: "center",
                           color: "var(--dsw-alias-label-tertiary, #999)"
                         },
@@ -676,16 +713,16 @@ window.__ModuleLoader__.load({
                         style: {
                           display: "flex",
                           alignItems: "center",
-                          gap: 6,
-                          padding: "6px 11px"
+                          gap: ds(6),
+                          padding: `${ds(6)}px ${ds(11)}px`
                         },
                         children: [
                           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
                             "span",
                             {
                               style: {
-                                width: 7,
-                                height: 7,
+                                width: ds(7),
+                                height: ds(7),
                                 borderRadius: 999,
                                 flex: "0 0 auto",
                                 background: stateTone(room.state)
@@ -713,9 +750,9 @@ window.__ModuleLoader__.load({
                               style: {
                                 flex: "1 1 auto",
                                 minWidth: 0,
-                                padding: "2px 6px",
-                                fontSize: 12,
-                                borderRadius: 6,
+                                padding: `${ds(2)}px ${ds(6)}px`,
+                                fontSize: ds(12),
+                                borderRadius: ds(6),
                                 border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
                                 background: "var(--dsw-alias-bg-layer-2, transparent)",
                                 color: "var(--dsw-alias-label-primary, #222)",
@@ -749,6 +786,7 @@ window.__ModuleLoader__.load({
                             IconButton,
                             {
                               label: room.view === "hidden" ? t("showWindow") : t("hideWindow"),
+                              scale: ds,
                               onClick: () => {
                                 if (room.view === "hidden") props.onShowWindow(room.key);
                                 else props.onHideWindow(room.key);
@@ -760,6 +798,7 @@ window.__ModuleLoader__.load({
                             IconButton,
                             {
                               label: t("rename"),
+                              scale: ds,
                               onClick: () => {
                                 setEditing(room.key);
                                 setAliasDraft(room.alias);
@@ -767,7 +806,7 @@ window.__ModuleLoader__.load({
                               children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(EditIcon, {})
                             }
                           ),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(IconButton, { label: t("removeRoom"), onClick: () => props.onRemove(room.key), children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {}) })
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(IconButton, { label: t("removeRoom"), scale: ds, onClick: () => props.onRemove(room.key), children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {}) })
                         ]
                       },
                       room.key
@@ -777,8 +816,8 @@ window.__ModuleLoader__.load({
                       {
                         style: {
                           display: "flex",
-                          gap: 6,
-                          padding: "8px 11px",
+                          gap: ds(6),
+                          padding: `${ds(8)}px ${ds(11)}px`,
                           borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
                         },
                         children: [
@@ -797,9 +836,9 @@ window.__ModuleLoader__.load({
                               style: {
                                 flex: "1 1 auto",
                                 minWidth: 0,
-                                padding: "4px 8px",
-                                fontSize: 12,
-                                borderRadius: 7,
+                                padding: `${ds(4)}px ${ds(8)}px`,
+                                fontSize: ds(12),
+                                borderRadius: ds(7),
                                 border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
                                 background: "var(--dsw-alias-bg-layer-2, transparent)",
                                 color: "var(--dsw-alias-label-primary, #222)",
@@ -817,9 +856,9 @@ window.__ModuleLoader__.load({
                               },
                               style: {
                                 flex: "0 0 auto",
-                                padding: "4px 10px",
-                                fontSize: 12,
-                                borderRadius: 7,
+                                padding: `${ds(4)}px ${ds(10)}px`,
+                                fontSize: ds(12),
+                                borderRadius: ds(7),
                                 border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
                                 background: "transparent",
                                 color: "var(--dsw-alias-label-primary, #222)",
@@ -837,12 +876,12 @@ window.__ModuleLoader__.load({
                       {
                         style: {
                           display: "flex",
-                          gap: 6,
-                          padding: "0 11px 9px"
+                          gap: ds(6),
+                          padding: `0 ${ds(11)}px ${ds(9)}px`
                         },
                         children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { onClick: props.onShowAll, children: t("showWindow") }),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { onClick: props.onHideAll, children: t("ungroupAll") })
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { label: t("showWindow"), onClick: props.onShowAll, scale: ds }),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { label: t("ungroupAll"), onClick: props.onHideAll, scale: ds })
                         ]
                       }
                     ) : null
@@ -872,7 +911,7 @@ window.__ModuleLoader__.load({
                     // otherwise the summary grows between the icon and the border and pushes
                     // the icon halfway across the pill.
                     flexDirection: side === "left" ? "row-reverse" : "row",
-                    gap: expanded ? 8 : 0,
+                    gap: expanded ? bs(8) : 0,
                     height: size,
                     // A pill that would run past the edge is clamped to the safe area, which
                     // keeps the summary readable on a phone instead of clipping it.
@@ -881,7 +920,7 @@ window.__ModuleLoader__.load({
                     // No padding on the icon's side: the glyph is already centred inside a
                     // full `size` box, so its own letterboxing is the gap to the pill edge.
                     // Only the summary needs breathing room against the rounded end.
-                    padding: expanded ? side === "left" ? "0 0 0 14px" : "0 14px 0 0" : 0,
+                    padding: expanded ? side === "left" ? `0 0 0 ${bs(14)}px` : `0 ${bs(14)}px 0 0` : 0,
                     borderRadius: 999,
                     border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
                     background: "var(--dsw-alias-bg-overlay, #fff)",
@@ -934,24 +973,37 @@ window.__ModuleLoader__.load({
                           flexDirection: "column",
                           alignItems: "flex-start",
                           gap: 1,
-                          font: "12px/1.25 system-ui, -apple-system, sans-serif"
+                          // The summary is the ball's own label, so it follows the ball: a larger
+                          // dot carries a larger summary, and the two always look like one object.
+                          // The ratio is taken against the default diameter, which keeps a default
+                          // ball drawing its text at the size it was designed for.
+                          font: `${Math.max(9, bs(12))}px/1.25 system-ui, -apple-system, sans-serif`
                         },
                         children: [
                           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
                             "span",
                             {
                               style: {
-                                maxWidth: 210,
+                                maxWidth: bs(210),
                                 overflow: "hidden",
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
                                 color: "var(--dsw-alias-label-secondary, #888)",
-                                fontSize: 11
+                                fontSize: Math.max(9, bs(11))
                               },
                               children: newest ? `${newest.user}：${summarise(newest.text)}` : t("waitingNew")
                             }
                           ),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { style: { color: "var(--dsw-alias-label-primary, #222)", fontSize: 12 }, children: rooms.length === 0 ? t("noRooms") : `${rooms.length} ${t("roomCount")}` })
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "span",
+                            {
+                              style: {
+                                color: "var(--dsw-alias-label-primary, #222)",
+                                fontSize: Math.max(9, bs(12))
+                              },
+                              children: rooms.length === 0 ? t("noRooms") : `${rooms.length} ${t("roomCount")}`
+                            }
+                          )
                         ]
                       }
                     ) : null
@@ -974,6 +1026,7 @@ window.__ModuleLoader__.load({
         return best === null ? null : { user: best.user, text: best.text };
       }
       function IconButton(props) {
+        const sp = props.scale;
         return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
           "button",
           {
@@ -983,15 +1036,15 @@ window.__ModuleLoader__.load({
             "aria-label": props.label,
             style: {
               flex: "0 0 auto",
-              width: 20,
-              height: 20,
+              width: sp(20),
+              height: sp(20),
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
               padding: 0,
-              fontSize: 12,
+              fontSize: sp(12),
               lineHeight: 1,
-              borderRadius: 5,
+              borderRadius: sp(5),
               border: "1px solid transparent",
               background: "transparent",
               color: "var(--dsw-alias-label-secondary, #666)",
@@ -1002,6 +1055,7 @@ window.__ModuleLoader__.load({
         );
       }
       function TextButton(props) {
+        const sp = props.scale;
         return /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
           "button",
           {
@@ -1009,15 +1063,15 @@ window.__ModuleLoader__.load({
             onClick: props.onClick,
             style: {
               flex: "1 1 auto",
-              padding: "3px 8px",
-              fontSize: 11,
-              borderRadius: 6,
+              padding: `${sp(3)}px ${sp(8)}px`,
+              fontSize: sp(11),
+              borderRadius: sp(6),
               border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))",
               background: "transparent",
               color: "var(--dsw-alias-label-secondary, #666)",
               cursor: "pointer"
             },
-            children: props.children
+            children: props.label
           }
         );
       }
@@ -1165,37 +1219,122 @@ window.__ModuleLoader__.load({
               field.field
             );
           }),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(BallSizeRow, {})
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(FrontendSettings, {})
         ] });
       }
-      function BallSizeRow() {
+      function FrontendSettings() {
         const [size, setSize] = (0, import_react2.useState)(() => readBallSize());
-        const commit = (next) => {
-          setSize(next);
-          const saved = loadState();
-          saveState({ ...saved, ballSize: next });
+        const [windowSize, setWindowSize] = (0, import_react2.useState)(() => readWindowSize());
+        const [scale, setScale] = (0, import_react2.useState)(() => clampScale(loadState().uiScale));
+        const changed = size !== DEFAULT_BALL_SIZE || windowSize.width !== DEFAULT_WINDOW_WIDTH || windowSize.height !== DEFAULT_WINDOW_HEIGHT || scale !== DEFAULT_UI_SCALE;
+        const reset = () => {
+          setSize(DEFAULT_BALL_SIZE);
+          setWindowSize({ width: DEFAULT_WINDOW_WIDTH, height: DEFAULT_WINDOW_HEIGHT });
+          setScale(DEFAULT_UI_SCALE);
+          saveState({
+            ...loadState(),
+            ballSize: DEFAULT_BALL_SIZE,
+            windowWidth: DEFAULT_WINDOW_WIDTH,
+            windowHeight: DEFAULT_WINDOW_HEIGHT,
+            uiScale: DEFAULT_UI_SCALE
+          });
         };
+        return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: FRONT_CARD, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: FRONT_HEADER, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { style: FRONT_HEADING, children: "前端设置" }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+              "button",
+              {
+                type: "button",
+                disabled: !changed,
+                onClick: reset,
+                style: { ...FRONT_RESET, opacity: changed ? 1 : 0.45, cursor: changed ? "pointer" : "default" },
+                children: "重置"
+              }
+            )
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { style: FRONT_NOTE, children: "这些设置只保存在当前浏览器，不会写入 dsh 配置，修改即时生效。" }),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+            SliderRow,
+            {
+              label: "悬浮球大小",
+              hint: `右下角悬浮球的直径，默认 ${DEFAULT_BALL_SIZE}px。`,
+              value: size,
+              min: MIN_BALL_SIZE,
+              max: MAX_BALL_SIZE,
+              step: 4,
+              unit: "px",
+              onChange: (next) => {
+                setSize(next);
+                saveState({ ...loadState(), ballSize: next });
+              }
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
+            SliderRow,
+            {
+              label: "窗口内缩放（DPI）",
+              hint: scale > COMFORTABLE_UI_SCALE_MAX ? `${scale}% 偏大，弹幕窗口里能看到的条数会明显变少。` : scale < COMFORTABLE_UI_SCALE_MIN ? `${scale}% 偏小，弹幕文字会比较难读。` : `弹幕窗口内文字、间距和按钮的大小，${DEFAULT_UI_SCALE}% 表示跟随页面缩放。`,
+              value: scale,
+              min: MIN_UI_SCALE,
+              max: MAX_UI_SCALE,
+              step: 1,
+              unit: "%",
+              onChange: (next) => {
+                setScale(next);
+                saveState({ ...loadState(), uiScale: next });
+              }
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: BALL_ROW, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: BALL_HEAD, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { style: BALL_LABEL, children: "弹幕窗口大小" }),
+              /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { style: BALL_VALUE, children: [
+                windowSize.width,
+                "×",
+                windowSize.height,
+                "px"
+              ] })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("p", { style: BALL_HINT, children: [
+              "直接拖动窗口右下角调整。重置会把它恢复为默认的 ",
+              DEFAULT_WINDOW_WIDTH,
+              "×",
+              DEFAULT_WINDOW_HEIGHT,
+              "px。"
+            ] })
+          ] })
+        ] });
+      }
+      function readWindowSize() {
+        const saved = loadState();
+        return {
+          width: clampLength(saved.windowWidth, DEFAULT_WINDOW_WIDTH, MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH),
+          height: clampLength(saved.windowHeight, DEFAULT_WINDOW_HEIGHT, MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT)
+        };
+      }
+      function SliderRow(props) {
         return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: BALL_ROW, children: [
           /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: BALL_HEAD, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { style: BALL_LABEL, children: "悬浮球大小" }),
+            /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("span", { style: BALL_LABEL, children: props.label }),
             /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { style: BALL_VALUE, children: [
-              size,
-              "px"
+              props.value,
+              props.unit
             ] })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
             "input",
             {
               type: "range",
-              min: MIN_BALL_SIZE,
-              max: MAX_BALL_SIZE,
-              step: 4,
-              value: size,
-              onChange: (event) => commit(Number(event.target.value)),
+              min: props.min,
+              max: props.max,
+              step: props.step,
+              value: props.value,
+              onChange: (event) => props.onChange(Number(event.target.value)),
               style: { width: "100%", accentColor: "var(--dsw-alias-brand-primary)" }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { style: BALL_HINT, children: "右下角悬浮球的直径。点击悬浮球管理各个直播间，刷新页面后生效。" })
+          /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("p", { style: BALL_HINT, children: props.hint })
         ] });
       }
       function readBallSize() {
@@ -1203,6 +1342,44 @@ window.__ModuleLoader__.load({
         if (typeof stored !== "number" || !Number.isFinite(stored)) return DEFAULT_BALL_SIZE;
         return Math.min(MAX_BALL_SIZE, Math.max(MIN_BALL_SIZE, Math.round(stored)));
       }
+      var FRONT_CARD = {
+        display: "flex",
+        flexDirection: "column",
+        gap: 4,
+        marginTop: 24
+      };
+      var FRONT_HEADER = {
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      };
+      var FRONT_RESET = {
+        flex: "0 0 auto",
+        marginLeft: "auto",
+        padding: "2px 8px",
+        fontSize: 12,
+        lineHeight: 1.5,
+        fontFamily: "inherit",
+        color: "var(--dsw-alias-label-secondary)",
+        background: "transparent",
+        border: "1px solid var(--dsw-alias-border-l2)",
+        borderRadius: 6,
+        whiteSpace: "nowrap"
+      };
+      var FRONT_HEADING = {
+        flex: 1,
+        minWidth: 0,
+        fontSize: 15,
+        fontWeight: 600,
+        lineHeight: 1.5,
+        color: "var(--dsw-alias-label-primary)"
+      };
+      var FRONT_NOTE = {
+        margin: "2px 0 4px",
+        fontSize: 12,
+        lineHeight: 1.5,
+        color: "var(--dsw-alias-label-tertiary)"
+      };
       var BALL_ROW = {
         display: "flex",
         flexDirection: "column",
@@ -1355,6 +1532,16 @@ window.__ModuleLoader__.load({
         rename: "重命名",
         renameHint: "双击修改标题",
         renameReset: "恢复原标题",
+        resizeHint: "拖动调整大小",
+        offlineHint: "当前房间未开播",
+        offlinePlaceholder: "当前房间未开播",
+        viewDanmaku: "查看弹幕",
+        stateOffline: "未开播",
+        stateOfflineViewing: "未开播（正在查看弹幕）",
+        stateError: "连接失败",
+        stateLive: "已连接",
+        stateHistory: "正在查看历史弹幕",
+        stateIdle: "未连接",
         noRooms: "还没有监控中的直播间",
         waitingNew: "等待新弹幕…",
         minimizeWindow: "最小化",
@@ -1401,6 +1588,16 @@ window.__ModuleLoader__.load({
         rename: "Rename",
         renameHint: "Double-click to rename",
         renameReset: "Use the room title",
+        resizeHint: "Drag to resize",
+        offlineHint: "This room is not live",
+        offlinePlaceholder: "This room is not live",
+        viewDanmaku: "View danmaku",
+        stateOffline: "Not live",
+        stateOfflineViewing: "Not live (viewing danmaku)",
+        stateError: "Connection failed",
+        stateLive: "Connected",
+        stateHistory: "Reading history danmaku",
+        stateIdle: "Not connected",
         noRooms: "No rooms are being monitored",
         waitingNew: "Waiting for new danmaku…",
         minimizeWindow: "Minimize",
@@ -1422,15 +1619,20 @@ window.__ModuleLoader__.load({
       var MIN_SUMMARY_CHARS = 48;
       var MAX_NAME_CHARS = 8;
       var MAX_NAME_FRACTION = "40%";
+      function px(value, scale) {
+        return Math.max(1, Math.round(value * scale));
+      }
       function Row(props) {
         const { item } = props;
+        const sp = (value) => px(value, props.scale);
         const color = item.kind === "enter" ? null : colorOf(item.color);
         const longName = [...item.user].length > MAX_NAME_CHARS;
+        const lineHeight = `${sp(15)}px`;
         return (
           // A wrapped message makes the row taller than its badges, and a flex row
           // stretches every other child to that height by default, which drags a badge
           // border down the whole row. Aligning to the top keeps each chip its own size.
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: 6, padding: "2px 0" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: sp(6), padding: `${sp(2)}px 0` }, children: [
             item.medal ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
               "span",
               {
@@ -1440,10 +1642,10 @@ window.__ModuleLoader__.load({
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
-                  padding: "0 4px",
-                  borderRadius: 3,
-                  fontSize: 10,
-                  lineHeight: "15px",
+                  padding: `0 ${sp(4)}px`,
+                  borderRadius: sp(3),
+                  fontSize: sp(10),
+                  lineHeight,
                   border: "1px solid currentColor",
                   color: "var(--dsw-alias-state-warn-primary, #f59e0b)"
                 },
@@ -1459,10 +1661,10 @@ window.__ModuleLoader__.load({
               {
                 style: {
                   flex: "0 0 auto",
-                  padding: "0 4px",
-                  borderRadius: 3,
-                  fontSize: 10,
-                  lineHeight: "15px",
+                  padding: `0 ${sp(4)}px`,
+                  borderRadius: sp(3),
+                  fontSize: sp(10),
+                  lineHeight,
                   background: "var(--dsw-alias-state-warn-primary, #f59e0b)",
                   color: "#fff"
                 },
@@ -1487,7 +1689,7 @@ window.__ModuleLoader__.load({
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap"
                   } : {},
-                  lineHeight: "15px",
+                  lineHeight,
                   color: "var(--dsw-alias-label-secondary, #888)"
                 },
                 title: item.user,
@@ -1503,9 +1705,9 @@ window.__ModuleLoader__.load({
                 style: {
                   flex: "1 1 auto",
                   minWidth: 0,
-                  // Pinned so the first text line and the 15px badges beside it share one
+                  // Pinned so the first text line and the badges beside it share one
                   // baseline; a browser default line height is fractional and drifts.
-                  lineHeight: "15px",
+                  lineHeight,
                   // A danmaku may carry an unbroken run such as a URL, and this column is
                   // the only one allowed to wrap. Without it the row overflows the window.
                   overflowWrap: "anywhere",
@@ -1516,6 +1718,13 @@ window.__ModuleLoader__.load({
             )
           ] })
         );
+      }
+      function stateTitle(t, state, veiled) {
+        if (state === "offline") return veiled ? t("stateOffline") : t("stateOfflineViewing");
+        if (state === "error") return t("stateError");
+        if (state === "live") return t("stateLive");
+        if (state === "connecting" || state === "reconnecting") return t("stateHistory");
+        return t("stateIdle");
       }
       function windowLabel(instance) {
         const alias = instance.alias.trim();
@@ -1541,8 +1750,13 @@ window.__ModuleLoader__.load({
         const pressTargetRef = (0, import_react3.useRef)(null);
         const lastTitlePressRef = (0, import_react3.useRef)(0);
         const idleTimer = (0, import_react3.useRef)(0);
+        const [resizing, setResizing] = (0, import_react3.useState)(null);
+        const resizeStartRef = (0, import_react3.useRef)(null);
+        const [showOffline, setShowOffline] = (0, import_react3.useState)(false);
         const minimized = instance.view === "minimized";
         const newest = instance.items[instance.items.length - 1];
+        const offline = instance.state === "offline";
+        const veiled = offline && !showOffline;
         (0, import_react3.useEffect)(() => {
           window.clearTimeout(idleTimer.current);
           if (!minimized) {
@@ -1615,6 +1829,39 @@ window.__ModuleLoader__.load({
             lastTitlePressRef.current = 0;
           }
         }, [props, instance.alias]);
+        const onResizeDown = (0, import_react3.useCallback)(
+          (event) => {
+            event.stopPropagation();
+            resizeStartRef.current = {
+              width: props.width,
+              height: props.height,
+              x: event.clientX,
+              y: event.clientY
+            };
+            setResizing({ width: props.width, height: props.height });
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+          },
+          [props.width, props.height]
+        );
+        const onResizeMove = (0, import_react3.useCallback)((event) => {
+          const start = resizeStartRef.current;
+          if (!start) return;
+          setResizing({
+            width: clampLength(start.width + (event.clientX - start.x), start.width, MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH),
+            height: clampLength(start.height + (event.clientY - start.y), start.height, MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT)
+          });
+        }, []);
+        const onResizeUp = (0, import_react3.useCallback)(
+          (event) => {
+            if (!resizeStartRef.current) return;
+            resizeStartRef.current = null;
+            event.currentTarget.releasePointerCapture?.(event.pointerId);
+            const size2 = resizing;
+            setResizing(null);
+            if (size2 !== null) props.onResizeEnd(size2);
+          },
+          [props, resizing]
+        );
         const submit = (0, import_react3.useCallback)(async () => {
           const text = reply.trim();
           if (text === "" || replyState === "sending") return;
@@ -1632,7 +1879,11 @@ window.__ModuleLoader__.load({
         const newestLine = newest ? `${newest.user}：${truncate(newest.text, MIN_SUMMARY_CHARS)}` : "";
         const showPreview = minimized && !idle && newest !== void 0;
         const settled = dragging ?? instance.place;
-        const position = settled ? { left: settled.x, top: settled.y } : minimized ? { right: 18, bottom: 18 + 34 + props.ballSize + props.slot * MINIMIZED_STEP } : { right: 18, bottom: 18 + 34 + props.ballSize };
+        const scale = props.uiScale / 100;
+        const sp = (value) => px(value, scale);
+        const icon = iconOf(scale);
+        const position = settled ? { left: settled.x, top: settled.y } : minimized ? { right: 18, bottom: 18 + 34 + props.ballSize + props.slot * sp(MINIMIZED_STEP) } : { right: 18, bottom: 18 + 34 + props.ballSize };
+        const size = resizing ?? { width: props.width, height: props.height };
         return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
           "div",
           {
@@ -1641,8 +1892,12 @@ window.__ModuleLoader__.load({
               position: "fixed",
               ...position,
               zIndex: 59,
-              width: 320,
+              // A minimized window is only its title bar, so a stored height would leave
+              // an empty card hanging below it.
+              width: size.width,
+              height: minimized ? void 0 : size.height,
               maxWidth: "calc(100vw - 24px)",
+              maxHeight: "calc(100vh - 24px)",
               pointerEvents: "auto",
               display: "flex",
               flexDirection: "column",
@@ -1650,7 +1905,7 @@ window.__ModuleLoader__.load({
               border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))",
               background: "var(--dsw-alias-bg-overlay, #fff)",
               boxShadow: minimized ? "0 4px 16px rgba(0,0,0,.14)" : "0 8px 28px rgba(0,0,0,.16)",
-              font: "12px/1.4 system-ui, -apple-system, sans-serif",
+              font: `${sp(12)}px/${1.4} system-ui, -apple-system, sans-serif`,
               overflow: "hidden"
             },
             children: [
@@ -1664,8 +1919,8 @@ window.__ModuleLoader__.load({
                   style: {
                     display: "flex",
                     alignItems: "center",
-                    gap: 6,
-                    padding: "7px 8px 7px 10px",
+                    gap: sp(6),
+                    padding: `${sp(7)}px ${sp(8)}px ${sp(7)}px ${sp(10)}px`,
                     // A minimized window has no content below the bar, so the rule that
                     // separates them would hang at the bottom edge of the card.
                     borderBottom: minimized ? "none" : "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))",
@@ -1677,13 +1932,14 @@ window.__ModuleLoader__.load({
                     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                       "span",
                       {
+                        title: stateTitle(t, instance.state, veiled),
                         style: {
                           flex: "0 0 auto",
-                          width: 8,
-                          height: 8,
+                          width: sp(8),
+                          height: sp(8),
                           borderRadius: 999,
                           background: tone,
-                          boxShadow: instance.state === "live" ? `0 0 0 3px ${tone}33` : "none"
+                          boxShadow: instance.state === "live" ? `0 0 0 ${sp(3)}px ${tone}33` : "none"
                         }
                       }
                     ),
@@ -1713,10 +1969,10 @@ window.__ModuleLoader__.load({
                         style: {
                           flex: "1 1 auto",
                           minWidth: 0,
-                          padding: "1px 5px",
-                          fontSize: 12,
+                          padding: `${sp(1)}px ${sp(5)}px`,
+                          fontSize: sp(12),
                           fontWeight: 600,
-                          borderRadius: 5,
+                          borderRadius: sp(5),
                           border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
                           background: "var(--dsw-alias-bg-layer-2, transparent)",
                           color: "var(--dsw-alias-label-primary, #222)",
@@ -1734,7 +1990,7 @@ window.__ModuleLoader__.load({
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
-                          fontSize: 12,
+                          fontSize: sp(12),
                           // The preview is lighter than the title so the two states stay
                           // distinguishable while the layout does not move at all.
                           fontWeight: showPreview ? 400 : 600,
@@ -1750,14 +2006,24 @@ window.__ModuleLoader__.load({
                         title: t("online"),
                         style: {
                           flex: "0 0 auto",
-                          fontSize: 11,
+                          fontSize: sp(11),
                           color: "var(--dsw-alias-label-secondary, #888)",
                           fontVariantNumeric: "tabular-nums"
                         },
                         children: instance.online
                       }
                     ) : null,
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-no-drag": true, onClick: props.onRefresh, title: t("refresh"), style: ICON, children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(RefreshIcon, {}) }),
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "button",
+                      {
+                        type: "button",
+                        "data-no-drag": true,
+                        onClick: props.onRefresh,
+                        title: t("refresh"),
+                        style: icon,
+                        children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(RefreshIcon, {})
+                      }
+                    ),
                     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                       "button",
                       {
@@ -1765,32 +2031,88 @@ window.__ModuleLoader__.load({
                         "data-no-drag": true,
                         onClick: minimized ? props.onRestore : props.onMinimize,
                         title: minimized ? t("expand") : t("minimizeWindow"),
-                        style: ICON,
+                        style: icon,
                         children: minimized ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(RestoreIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MinimizeIcon, {})
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("button", { type: "button", "data-no-drag": true, onClick: props.onClose, title: t("hideWindow"), style: ICON, children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(CloseIcon, {}) })
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "button",
+                      {
+                        type: "button",
+                        "data-no-drag": true,
+                        onClick: props.onClose,
+                        title: t("hideWindow"),
+                        style: icon,
+                        children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(CloseIcon, {})
+                      }
+                    )
                   ]
                 }
               ),
-              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+              minimized ? null : veiled ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+                "div",
+                {
+                  style: {
+                    flex: "1 1 auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: sp(10),
+                    padding: `${sp(14)}px ${sp(12)}px`,
+                    fontSize: sp(12),
+                    color: "var(--dsw-alias-label-secondary, #888)"
+                  },
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: t("offlineHint") }),
+                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                      "button",
+                      {
+                        type: "button",
+                        onClick: () => setShowOffline(true),
+                        style: {
+                          ...icon,
+                          width: "auto",
+                          height: sp(26),
+                          padding: `0 ${sp(14)}px`,
+                          fontSize: sp(12),
+                          border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                          borderRadius: sp(7),
+                          color: "var(--dsw-alias-label-primary, #222)",
+                          whiteSpace: "nowrap"
+                        },
+                        children: t("viewDanmaku")
+                      }
+                    )
+                  ]
+                }
+              ) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                 "div",
                 {
                   ref: listRef,
                   onScroll,
-                  style: { maxHeight: 280, minHeight: 60, overflowY: "auto", padding: "6px 10px" },
+                  style: {
+                    flex: "1 1 auto",
+                    // A floor on the list's height keeps a short window from collapsing it
+                    // to nothing, but it cannot be a fixed scaled length: at a large zoom the
+                    // floor would exceed a short card and push the reply row out of view. A
+                    // percentage floor shrinks with the card instead.
+                    minHeight: "18%",
+                    overflowY: "auto",
+                    padding: `${sp(6)}px ${sp(10)}px`
+                  },
                   children: instance.items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                     "div",
                     {
                       style: {
-                        padding: "14px 4px",
-                        fontSize: 12,
+                        padding: `${sp(14)}px ${sp(4)}px`,
+                        fontSize: sp(12),
                         color: "var(--dsw-alias-label-tertiary, #999)",
                         textAlign: "center"
                       },
                       children: instance.notice !== "" ? instance.notice : t("empty")
                     }
-                  ) : instance.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Row, { item, superChatLabel: t("superchat") }, item.id))
+                  ) : instance.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Row, { item, superChatLabel: t("superchat"), scale }, item.id))
                 }
               ),
               minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
@@ -1799,8 +2121,8 @@ window.__ModuleLoader__.load({
                   "data-no-drag": true,
                   style: {
                     display: "flex",
-                    gap: 6,
-                    padding: "6px 8px 8px",
+                    gap: sp(6),
+                    padding: `${sp(6)}px ${sp(8)}px ${sp(8)}px`,
                     borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
                   },
                   children: [
@@ -1812,15 +2134,15 @@ window.__ModuleLoader__.load({
                         onKeyDown: (event) => {
                           if (event.key === "Enter") void submit();
                         },
-                        placeholder: props.canReply ? t("sendPlaceholder") : props.replyReason || t("sendPlaceholder"),
+                        placeholder: veiled ? t("offlinePlaceholder") : props.canReply ? t("sendPlaceholder") : props.replyReason || t("sendPlaceholder"),
                         maxLength: 20,
-                        disabled: !props.canReply,
+                        disabled: veiled || !props.canReply,
                         style: {
                           flex: "1 1 auto",
                           minWidth: 0,
-                          padding: "4px 8px",
-                          fontSize: 12,
-                          borderRadius: 7,
+                          padding: `${sp(4)}px ${sp(8)}px`,
+                          fontSize: sp(12),
+                          borderRadius: sp(7),
                           border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
                           background: "var(--dsw-alias-bg-layer-2, transparent)",
                           color: "var(--dsw-alias-label-primary, #222)",
@@ -1834,21 +2156,42 @@ window.__ModuleLoader__.load({
                       {
                         type: "button",
                         onClick: () => void submit(),
-                        disabled: !props.canReply || replyState === "sending",
+                        disabled: veiled || !props.canReply || replyState === "sending",
                         style: {
-                          ...ICON,
+                          ...icon,
                           width: "auto",
-                          padding: "0 10px",
-                          height: 24,
+                          padding: `0 ${sp(10)}px`,
+                          height: sp(24),
                           border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                          borderRadius: 7,
-                          opacity: props.canReply ? 1 : 0.5,
+                          borderRadius: sp(7),
+                          opacity: veiled || !props.canReply ? 0.5 : 1,
                           whiteSpace: "nowrap"
                         },
                         children: replyState === "sending" ? t("sending") : replyState === "sent" ? t("sent") : t("send")
                       }
                     )
                   ]
+                }
+              ),
+              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                "div",
+                {
+                  onPointerDown: onResizeDown,
+                  onPointerMove: onResizeMove,
+                  onPointerUp: onResizeUp,
+                  onPointerCancel: onResizeUp,
+                  title: t("resizeHint"),
+                  style: {
+                    position: "absolute",
+                    right: 0,
+                    bottom: 0,
+                    width: sp(14),
+                    height: sp(14),
+                    cursor: "nwse-resize",
+                    touchAction: "none",
+                    // Two short strokes read as a grip without needing an icon asset.
+                    background: "linear-gradient(135deg, transparent 45%, var(--dsw-alias-label-tertiary, #bbb) 45%, var(--dsw-alias-label-tertiary, #bbb) 55%, transparent 55%), linear-gradient(135deg, transparent 68%, var(--dsw-alias-label-tertiary, #bbb) 68%, var(--dsw-alias-label-tertiary, #bbb) 78%, transparent 78%)"
+                  }
                 }
               )
             ]
@@ -1859,21 +2202,34 @@ window.__ModuleLoader__.load({
         const flat = text.replace(/\s+/g, " ").trim();
         return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
       }
-      var ICON = {
-        flex: "0 0 auto",
-        width: 22,
-        height: 22,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 0,
-        fontSize: 13,
-        lineHeight: 1,
-        borderRadius: 6,
-        border: "1px solid transparent",
-        background: "transparent",
-        color: "var(--dsw-alias-label-secondary, #666)",
-        cursor: "pointer"
+      var iconOf = (scale) => {
+        const sp = (value) => px(value, scale);
+        return {
+          // A card narrower than its scaled chrome is possible, because the two settings
+          // are independent: a 240px window at 300% cannot fit three buttons at their
+          // drawn size. The buttons shrink rather than overflow, so a narrow card keeps
+          // its close button reachable instead of clipping it at the hidden edge.
+          flex: "0 1 auto",
+          width: sp(22),
+          height: sp(22),
+          // At the largest zoom against the narrowest card these three buttons cannot
+          // all keep their drawn width, so they give up space down to a third of it and
+          // the title gives up its own remainder first. Nothing overflows the hidden
+          // edge, which would put the close button out of reach.
+          minWidth: sp(7),
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+          padding: 0,
+          fontSize: sp(13),
+          lineHeight: 1,
+          borderRadius: sp(6),
+          border: "1px solid transparent",
+          background: "transparent",
+          color: "var(--dsw-alias-label-secondary, #666)",
+          cursor: "pointer"
+        };
       };
 
       // src/client/overlay.tsx
@@ -1925,7 +2281,18 @@ window.__ModuleLoader__.load({
           autoConnect: false
         });
         const [credential, setCredential] = (0, import_react4.useState)(null);
-        const [ballSize] = (0, import_react4.useState)(clampBall(saved.ballSize));
+        const [front, setFront] = (0, import_react4.useState)(() => readFront(saved));
+        (0, import_react4.useEffect)(
+          () => onStateChange(() => {
+            const next = readFront(loadState());
+            setFront(
+              (previous) => previous.ballSize === next.ballSize && previous.width === next.width && previous.height === next.height && previous.uiScale === next.uiScale ? previous : next
+            );
+          }),
+          []
+        );
+        const ballSize = front.ballSize;
+        const windowSize = { width: front.width, height: front.height };
         const [ballPlace, setBallPlace] = (0, import_react4.useState)(
           saved.ballPlace ?? null
         );
@@ -2021,7 +2388,9 @@ window.__ModuleLoader__.load({
               place: snapshot.place
             });
           }
+          const { room: _room, enabled: _enabled, collapsed: _collapsed, place: _place, ...kept } = loadState();
           saveState({
+            ...kept,
             rooms,
             ballSize: nextSize,
             ballPlace: placeRef.current,
@@ -2166,7 +2535,13 @@ window.__ModuleLoader__.load({
               },
               follow: instance.follow,
               slot: instance.place === null && instance.view === "minimized" ? slot++ : 0,
-              ballSize
+              ballSize,
+              width: windowSize.width,
+              height: windowSize.height,
+              uiScale: front.uiScale,
+              onResizeEnd: (size) => {
+                saveState({ ...loadState(), windowWidth: size.width, windowHeight: size.height });
+              }
             },
             instance.key
           )),
@@ -2176,6 +2551,7 @@ window.__ModuleLoader__.load({
               t,
               rooms: instances,
               size: ballSize,
+              uiScale: front.uiScale,
               open: menuOpen,
               onToggleMenu: () => setMenuOpen((value) => !value),
               onShowWindow: (key) => setView(key, "window"),
@@ -2198,6 +2574,14 @@ window.__ModuleLoader__.load({
       function clampBall(value) {
         if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_BALL_SIZE;
         return Math.min(MAX_BALL_SIZE, Math.max(MIN_BALL_SIZE, Math.round(value)));
+      }
+      function readFront(saved) {
+        return {
+          ballSize: clampBall(saved.ballSize),
+          width: clampLength(saved.windowWidth, DEFAULT_WINDOW_WIDTH, MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH),
+          height: clampLength(saved.windowHeight, DEFAULT_WINDOW_HEIGHT, MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT),
+          uiScale: clampScale(saved.uiScale)
+        };
       }
 
       // src/client/index.tsx

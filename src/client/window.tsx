@@ -20,10 +20,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { CopyKey } from './copy.ts'
-import { colorOf, type Item } from './api.ts'
+import {
+  clampLength,
+  colorOf,
+  MAX_WINDOW_HEIGHT,
+  MAX_WINDOW_WIDTH,
+  MIN_WINDOW_HEIGHT,
+  MIN_WINDOW_WIDTH,
+  type Item,
+} from './api.ts'
 import { CloseIcon, MinimizeIcon, RefreshIcon, RestoreIcon } from './icons.tsx'
 import { stateTone } from './rooms.ts'
-import type { RoomInstance } from './rooms.ts'
+import type { RoomInstance, RoomState } from './rooms.ts'
 
 /** How long a minimized window keeps showing the newest line before its title returns. */
 const IDLE_FADE_MS = 5_000
@@ -87,27 +95,67 @@ export interface WindowProps {
   readonly slot: number
   /** Height the ball occupies, so the stack clears it. */
   readonly ballSize: number
+  /** Card width in pixels. */
+  readonly width: number
+  /** Card height in pixels. */
+  readonly height: number
+  /**
+   * Zoom for the card's contents, as a percentage of their declared size.
+   *
+   * It scales what is drawn inside the card and never the card itself, so the two
+   * sizes stay independent: a user can enlarge the text without the window
+   * covering more of the page. At 100 the contents draw at their declared size,
+   * which CSS already multiplies by the browser's page zoom.
+   */
+  readonly uiScale: number
+  /**
+   * Called when a resize gesture ends.
+   *
+   * Only the release is reported: a per-frame callback would write to storage on
+   * every pointer move and make the drag stutter.
+   */
+  readonly onResizeEnd: (size: { width: number; height: number }) => void
+}
+
+/**
+ * Multiply one interior length by the zoom and keep it a whole pixel.
+ *
+ * A zoomed value is rounded and held at a minimum of one pixel so a hairline gap
+ * or a border radius never collapses into nothing at a small zoom, and never
+ * arrives as a fractional length that two browsers would round differently.
+ *
+ * @param value - the length as written for a zoom of 100.
+ * @param scale - the zoom as a factor, where 1 draws the length as written.
+ * @returns the length to render.
+ */
+function px(value: number, scale: number): number {
+  return Math.max(1, Math.round(value * scale))
 }
 
 /**
  * One danmaku row.
  *
- * @param props - the item and the localized super-chat label.
+ * @param props - the item, the localized super-chat label and the zoom factor.
  * @returns the row.
  */
-function Row(props: { readonly item: Item; readonly superChatLabel: string }) {
+function Row(props: { readonly item: Item; readonly superChatLabel: string; readonly scale: number }) {
   const { item } = props
+  const sp = (value: number): number => px(value, props.scale)
   const color = item.kind === 'enter' ? null : colorOf(item.color)
   // A Bilibili nickname may reach 20 characters, which is most of a 320px window
   // before a medal or a message is considered. Only a name past the limit is
   // allowed to shrink, so an ordinary one keeps its full width and reads as a name.
   const longName = [...item.user].length > MAX_NAME_CHARS
+  // The three parts of a row share one line box, so the badges, the nickname and
+  // the message all take the same scaled line height. A row that scaled its font
+  // but not its line height would clip a descender at a large zoom.
+  const lineHeight = `${sp(15)}px`
 
   return (
     // A wrapped message makes the row taller than its badges, and a flex row
     // stretches every other child to that height by default, which drags a badge
     // border down the whole row. Aligning to the top keeps each chip its own size.
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '2px 0' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: sp(6), padding: `${sp(2)}px 0` }}>
       {item.medal ? (
         <span
           style={{
@@ -116,10 +164,10 @@ function Row(props: { readonly item: Item; readonly superChatLabel: string }) {
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            padding: '0 4px',
-            borderRadius: 3,
-            fontSize: 10,
-            lineHeight: '15px',
+            padding: `0 ${sp(4)}px`,
+            borderRadius: sp(3),
+            fontSize: sp(10),
+            lineHeight,
             border: '1px solid currentColor',
             color: 'var(--dsw-alias-state-warn-primary, #f59e0b)',
           }}
@@ -133,10 +181,10 @@ function Row(props: { readonly item: Item; readonly superChatLabel: string }) {
         <span
           style={{
             flex: '0 0 auto',
-            padding: '0 4px',
-            borderRadius: 3,
-            fontSize: 10,
-            lineHeight: '15px',
+            padding: `0 ${sp(4)}px`,
+            borderRadius: sp(3),
+            fontSize: sp(10),
+            lineHeight,
             background: 'var(--dsw-alias-state-warn-primary, #f59e0b)',
             color: '#fff',
           }}
@@ -159,7 +207,7 @@ function Row(props: { readonly item: Item; readonly superChatLabel: string }) {
                 whiteSpace: 'nowrap' as const,
               }
             : {}),
-          lineHeight: '15px',
+          lineHeight,
           color: 'var(--dsw-alias-label-secondary, #888)',
         }}
         title={item.user}
@@ -171,9 +219,9 @@ function Row(props: { readonly item: Item; readonly superChatLabel: string }) {
         style={{
           flex: '1 1 auto',
           minWidth: 0,
-          // Pinned so the first text line and the 15px badges beside it share one
+          // Pinned so the first text line and the badges beside it share one
           // baseline; a browser default line height is fractional and drifts.
-          lineHeight: '15px',
+          lineHeight,
           // A danmaku may carry an unbroken run such as a URL, and this column is
           // the only one allowed to wrap. Without it the row overflows the window.
           overflowWrap: 'anywhere',
@@ -187,6 +235,27 @@ function Row(props: { readonly item: Item; readonly superChatLabel: string }) {
       </span>
     </div>
   )
+}
+
+/**
+ * The tooltip the status dot carries.
+ *
+ * The dot's colour already says roughly how the room is doing; the text says
+ * exactly why, which is what the reader needs when the colour is the same for
+ * two different situations, such as a room that is off air and one that is off
+ * air while its danmaku is being read anyway.
+ *
+ * @param t - the translator.
+ * @param state - the connection state.
+ * @param veiled - whether the offline veil is still up.
+ * @returns the localized tooltip.
+ */
+function stateTitle(t: (key: CopyKey) => string, state: RoomState, veiled: boolean): string {
+  if (state === 'offline') return veiled ? t('stateOffline') : t('stateOfflineViewing')
+  if (state === 'error') return t('stateError')
+  if (state === 'live') return t('stateLive')
+  if (state === 'connecting' || state === 'reconnecting') return t('stateHistory')
+  return t('stateIdle')
 }
 
 /**
@@ -253,8 +322,37 @@ export function DanmakuWindow(props: WindowProps) {
   const lastTitlePressRef = useRef(0)
   const idleTimer = useRef(0)
 
+  /**
+   * The size a resize gesture has reached so far, or null when not resizing.
+   *
+   * Held in state for the same reason the drag position is: a new danmaku
+   * re-renders the card constantly, and a size written only to the DOM would be
+   * reset from `props.width`/`props.height` on the next render.
+   */
+  const [resizing, setResizing] = useState<{ width: number; height: number } | null>(null)
+  /** Size at pointerdown and the pointer origin, used to compute the new size. */
+  const resizeStartRef = useRef<{ width: number; height: number; x: number; y: number } | null>(null)
+
+  /**
+   * Whether the reader has opened the danmaku of an offline room.
+   *
+   * Local on purpose: it is not persisted, so a reload puts the veil back and the
+   * window keeps announcing that the room is not streaming.
+   */
+  const [showOffline, setShowOffline] = useState(false)
+
   const minimized = instance.view === 'minimized'
   const newest = instance.items[instance.items.length - 1]
+  /**
+   * Whether the room is known to be off air.
+   *
+   * The Host reports `offline` on the status event, which is what gives the dot
+   * its idle tone. The veil is driven by the same value so the two can never say
+   * different things about the same room.
+   */
+  const offline = instance.state === 'offline'
+  /** The veil hides the list and the reply row until the reader asks for them. */
+  const veiled = offline && !showOffline
 
   // A minimized window shows the newest line in place of its title, then falls back
   // to the title once nothing has arrived for a while. The title is the resting state
@@ -348,6 +446,48 @@ export function DanmakuWindow(props: WindowProps) {
     }
   }, [props, instance.alias])
 
+  /**
+   * Start a resize from the corner grip.
+   *
+   * The grip sits at the bottom right, so width and height both grow with the
+   * pointer and a drag up or left shrinks the card.
+   */
+  const onResizeDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      event.stopPropagation()
+      resizeStartRef.current = {
+        width: props.width,
+        height: props.height,
+        x: event.clientX,
+        y: event.clientY,
+      }
+      setResizing({ width: props.width, height: props.height })
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    },
+    [props.width, props.height],
+  )
+
+  const onResizeMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const start = resizeStartRef.current
+    if (!start) return
+    setResizing({
+      width: clampLength(start.width + (event.clientX - start.x), start.width, MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH),
+      height: clampLength(start.height + (event.clientY - start.y), start.height, MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT),
+    })
+  }, [])
+
+  const onResizeUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!resizeStartRef.current) return
+      resizeStartRef.current = null
+      event.currentTarget.releasePointerCapture?.(event.pointerId)
+      const size = resizing
+      setResizing(null)
+      if (size !== null) props.onResizeEnd(size)
+    },
+    [props, resizing],
+  )
+
   const submit = useCallback(async () => {
     const text = reply.trim()
     if (text === '' || replyState === 'sending') return
@@ -375,11 +515,27 @@ export function DanmakuWindow(props: WindowProps) {
   // step clears a minimized card's whole height, which is its title bar: a taller
   // bar would overlap the next one, and a shorter step would leave a visible gap.
   const settled = dragging ?? instance.place
+  /**
+   * How much the card's contents are enlarged or shrunk.
+   *
+   * Only the values drawn inside the card are multiplied by it, because the card
+   * itself must keep measuring exactly what the resize gesture asked for: a
+   * transform or a zoom on the whole card would rescale its own geometry and make
+   * the size stored in pixels disagree with what a drag reports.
+   */
+  const scale = props.uiScale / 100
+  const sp = (value: number): number => px(value, scale)
+  const icon = iconOf(scale)
+  // A minimized card stacks its slot above the ball, and its height is the title
+  // bar, which now scales, so the step has to scale with it or the cards would
+  // overlap at a large zoom and leave a gap at a small one.
   const position = settled
     ? { left: settled.x, top: settled.y }
     : minimized
-      ? { right: 18, bottom: 18 + 34 + props.ballSize + props.slot * MINIMIZED_STEP }
+      ? { right: 18, bottom: 18 + 34 + props.ballSize + props.slot * sp(MINIMIZED_STEP) }
       : { right: 18, bottom: 18 + 34 + props.ballSize }
+
+  const size = resizing ?? { width: props.width, height: props.height }
 
   return (
     <div
@@ -388,8 +544,12 @@ export function DanmakuWindow(props: WindowProps) {
         position: 'fixed',
         ...position,
         zIndex: 59,
-        width: 320,
+        // A minimized window is only its title bar, so a stored height would leave
+        // an empty card hanging below it.
+        width: size.width,
+        height: minimized ? undefined : size.height,
         maxWidth: 'calc(100vw - 24px)',
+        maxHeight: 'calc(100vh - 24px)',
         pointerEvents: 'auto',
         display: 'flex',
         flexDirection: 'column',
@@ -397,7 +557,7 @@ export function DanmakuWindow(props: WindowProps) {
         border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))',
         background: 'var(--dsw-alias-bg-overlay, #fff)',
         boxShadow: minimized ? '0 4px 16px rgba(0,0,0,.14)' : '0 8px 28px rgba(0,0,0,.16)',
-        font: '12px/1.4 system-ui, -apple-system, sans-serif',
+        font: `${sp(12)}px/${1.4} system-ui, -apple-system, sans-serif`,
         overflow: 'hidden',
       }}
     >
@@ -409,8 +569,8 @@ export function DanmakuWindow(props: WindowProps) {
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
-          padding: '7px 8px 7px 10px',
+          gap: sp(6),
+          padding: `${sp(7)}px ${sp(8)}px ${sp(7)}px ${sp(10)}px`,
           // A minimized window has no content below the bar, so the rule that
           // separates them would hang at the bottom edge of the card.
           borderBottom: minimized ? 'none' : '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))',
@@ -420,13 +580,14 @@ export function DanmakuWindow(props: WindowProps) {
         }}
       >
         <span
+          title={stateTitle(t, instance.state, veiled)}
           style={{
             flex: '0 0 auto',
-            width: 8,
-            height: 8,
+            width: sp(8),
+            height: sp(8),
             borderRadius: 999,
             background: tone,
-            boxShadow: instance.state === 'live' ? `0 0 0 3px ${tone}33` : 'none',
+            boxShadow: instance.state === 'live' ? `0 0 0 ${sp(3)}px ${tone}33` : 'none',
           }}
         />
         {editing ? (
@@ -454,10 +615,10 @@ export function DanmakuWindow(props: WindowProps) {
             style={{
               flex: '1 1 auto',
               minWidth: 0,
-              padding: '1px 5px',
-              fontSize: 12,
+              padding: `${sp(1)}px ${sp(5)}px`,
+              fontSize: sp(12),
               fontWeight: 600,
-              borderRadius: 5,
+              borderRadius: sp(5),
               border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
               background: 'var(--dsw-alias-bg-layer-2, transparent)',
               color: 'var(--dsw-alias-label-primary, #222)',
@@ -474,7 +635,7 @@ export function DanmakuWindow(props: WindowProps) {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              fontSize: 12,
+              fontSize: sp(12),
               // The preview is lighter than the title so the two states stay
               // distinguishable while the layout does not move at all.
               fontWeight: showPreview ? 400 : 600,
@@ -492,7 +653,7 @@ export function DanmakuWindow(props: WindowProps) {
             title={t('online')}
             style={{
               flex: '0 0 auto',
-              fontSize: 11,
+              fontSize: sp(11),
               color: 'var(--dsw-alias-label-secondary, #888)',
               fontVariantNumeric: 'tabular-nums',
             }}
@@ -500,7 +661,13 @@ export function DanmakuWindow(props: WindowProps) {
             {instance.online}
           </span>
         ) : null}
-        <button type="button" data-no-drag onClick={props.onRefresh} title={t('refresh')} style={ICON}>
+        <button
+          type="button"
+          data-no-drag
+          onClick={props.onRefresh}
+          title={t('refresh')}
+          style={icon}
+        >
           <RefreshIcon />
         </button>
         <button
@@ -508,26 +675,74 @@ export function DanmakuWindow(props: WindowProps) {
           data-no-drag
           onClick={minimized ? props.onRestore : props.onMinimize}
           title={minimized ? t('expand') : t('minimizeWindow')}
-          style={ICON}
+          style={icon}
         >
           {minimized ? <RestoreIcon /> : <MinimizeIcon />}
         </button>
-        <button type="button" data-no-drag onClick={props.onClose} title={t('hideWindow')} style={ICON}>
+        <button
+          type="button"
+          data-no-drag
+          onClick={props.onClose}
+          title={t('hideWindow')}
+          style={icon}
+        >
           <CloseIcon />
         </button>
       </div>
 
-      {minimized ? null : (
+      {minimized ? null : veiled ? (
+        <div
+          style={{
+            flex: '1 1 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: sp(10),
+            padding: `${sp(14)}px ${sp(12)}px`,
+            fontSize: sp(12),
+            color: 'var(--dsw-alias-label-secondary, #888)',
+          }}
+        >
+          <span>{t('offlineHint')}</span>
+          <button
+            type="button"
+            onClick={() => setShowOffline(true)}
+            style={{
+              ...icon,
+              width: 'auto',
+              height: sp(26),
+              padding: `0 ${sp(14)}px`,
+              fontSize: sp(12),
+              border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
+              borderRadius: sp(7),
+              color: 'var(--dsw-alias-label-primary, #222)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {t('viewDanmaku')}
+          </button>
+        </div>
+      ) : (
         <div
           ref={listRef}
           onScroll={onScroll}
-          style={{ maxHeight: 280, minHeight: 60, overflowY: 'auto', padding: '6px 10px' }}
+          style={{
+            flex: '1 1 auto',
+            // A floor on the list's height keeps a short window from collapsing it
+            // to nothing, but it cannot be a fixed scaled length: at a large zoom the
+            // floor would exceed a short card and push the reply row out of view. A
+            // percentage floor shrinks with the card instead.
+            minHeight: '18%',
+            overflowY: 'auto',
+            padding: `${sp(6)}px ${sp(10)}px`,
+          }}
         >
           {instance.items.length === 0 ? (
             <div
               style={{
-                padding: '14px 4px',
-                fontSize: 12,
+                padding: `${sp(14)}px ${sp(4)}px`,
+                fontSize: sp(12),
                 color: 'var(--dsw-alias-label-tertiary, #999)',
                 textAlign: 'center',
               }}
@@ -535,7 +750,7 @@ export function DanmakuWindow(props: WindowProps) {
               {instance.notice !== '' ? instance.notice : t('empty')}
             </div>
           ) : instance.items.map((item) => (
-            <Row key={item.id} item={item} superChatLabel={t('superchat')} />
+            <Row key={item.id} item={item} superChatLabel={t('superchat')} scale={scale} />
           ))}
         </div>
       )}
@@ -545,8 +760,8 @@ export function DanmakuWindow(props: WindowProps) {
         data-no-drag
         style={{
           display: 'flex',
-          gap: 6,
-          padding: '6px 8px 8px',
+          gap: sp(6),
+          padding: `${sp(6)}px ${sp(8)}px ${sp(8)}px`,
           borderTop: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))',
         }}
       >
@@ -556,15 +771,21 @@ export function DanmakuWindow(props: WindowProps) {
           onKeyDown={(event) => {
             if (event.key === 'Enter') void submit()
           }}
-          placeholder={props.canReply ? t('sendPlaceholder') : (props.replyReason || t('sendPlaceholder'))}
+          placeholder={
+            veiled
+              ? t('offlinePlaceholder')
+              : props.canReply
+                ? t('sendPlaceholder')
+                : (props.replyReason || t('sendPlaceholder'))
+          }
           maxLength={20}
-          disabled={!props.canReply}
+          disabled={veiled || !props.canReply}
           style={{
             flex: '1 1 auto',
             minWidth: 0,
-            padding: '4px 8px',
-            fontSize: 12,
-            borderRadius: 7,
+            padding: `${sp(4)}px ${sp(8)}px`,
+            fontSize: sp(12),
+            borderRadius: sp(7),
             border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
             background: 'var(--dsw-alias-bg-layer-2, transparent)',
             color: 'var(--dsw-alias-label-primary, #222)',
@@ -575,21 +796,42 @@ export function DanmakuWindow(props: WindowProps) {
         <button
           type="button"
           onClick={() => void submit()}
-          disabled={!props.canReply || replyState === 'sending'}
+          disabled={veiled || !props.canReply || replyState === 'sending'}
           style={{
-            ...ICON,
+            ...icon,
             width: 'auto',
-            padding: '0 10px',
-            height: 24,
+            padding: `0 ${sp(10)}px`,
+            height: sp(24),
             border: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))',
-            borderRadius: 7,
-            opacity: props.canReply ? 1 : 0.5,
+            borderRadius: sp(7),
+            opacity: veiled || !props.canReply ? 0.5 : 1,
             whiteSpace: 'nowrap',
           }}
         >
           {replyState === 'sending' ? t('sending') : replyState === 'sent' ? t('sent') : t('send')}
         </button>
       </div>
+      )}
+      {minimized ? null : (
+        <div
+          onPointerDown={onResizeDown}
+          onPointerMove={onResizeMove}
+          onPointerUp={onResizeUp}
+          onPointerCancel={onResizeUp}
+          title={t('resizeHint')}
+          style={{
+            position: 'absolute',
+            right: 0,
+            bottom: 0,
+            width: sp(14),
+            height: sp(14),
+            cursor: 'nwse-resize',
+            touchAction: 'none',
+            // Two short strokes read as a grip without needing an icon asset.
+            background:
+              'linear-gradient(135deg, transparent 45%, var(--dsw-alias-label-tertiary, #bbb) 45%, var(--dsw-alias-label-tertiary, #bbb) 55%, transparent 55%), linear-gradient(135deg, transparent 68%, var(--dsw-alias-label-tertiary, #bbb) 68%, var(--dsw-alias-label-tertiary, #bbb) 78%, transparent 78%)',
+          }}
+        />
       )}
     </div>
   )
@@ -607,20 +849,33 @@ function truncate(text: string, max: number): string {
   return flat.length <= max ? flat : `${flat.slice(0, max)}…`
 }
 
-/** Shared chrome for the small window buttons. */
-const ICON: React.CSSProperties = {
-  flex: '0 0 auto',
-  width: 22,
-  height: 22,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 0,
-  fontSize: 13,
-  lineHeight: 1,
-  borderRadius: 6,
-  border: '1px solid transparent',
-  background: 'transparent',
-  color: 'var(--dsw-alias-label-secondary, #666)',
-  cursor: 'pointer',
+/** Shared chrome for the small window buttons, drawn at the card's current zoom. */
+const iconOf = (scale: number): React.CSSProperties => {
+  const sp = (value: number): number => px(value, scale)
+  return {
+    // A card narrower than its scaled chrome is possible, because the two settings
+    // are independent: a 240px window at 300% cannot fit three buttons at their
+    // drawn size. The buttons shrink rather than overflow, so a narrow card keeps
+    // its close button reachable instead of clipping it at the hidden edge.
+    flex: '0 1 auto',
+    width: sp(22),
+    height: sp(22),
+    // At the largest zoom against the narrowest card these three buttons cannot
+    // all keep their drawn width, so they give up space down to a third of it and
+    // the title gives up its own remainder first. Nothing overflows the hidden
+    // edge, which would put the close button out of reach.
+    minWidth: sp(7),
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    padding: 0,
+    fontSize: sp(13),
+    lineHeight: 1,
+    borderRadius: sp(6),
+    border: '1px solid transparent',
+    background: 'transparent',
+    color: 'var(--dsw-alias-label-secondary, #666)',
+    cursor: 'pointer',
+  }
 }

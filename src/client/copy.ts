@@ -47,6 +47,16 @@ export type CopyKey =
   | 'rename'
   | 'renameHint'
   | 'renameReset'
+  | 'resizeHint'
+  | 'offlineHint'
+  | 'offlinePlaceholder'
+  | 'viewDanmaku'
+  | 'stateOffline'
+  | 'stateOfflineViewing'
+  | 'stateError'
+  | 'stateLive'
+  | 'stateHistory'
+  | 'stateIdle'
   | 'noRooms'
   | 'waitingNew'
   | 'minimizeWindow'
@@ -98,6 +108,16 @@ export const zh: Dictionary = {
   rename: '重命名',
   renameHint: '双击修改标题',
   renameReset: '恢复原标题',
+  resizeHint: '拖动调整大小',
+  offlineHint: '当前房间未开播',
+  offlinePlaceholder: '当前房间未开播',
+  viewDanmaku: '查看弹幕',
+  stateOffline: '未开播',
+  stateOfflineViewing: '未开播（正在查看弹幕）',
+  stateError: '连接失败',
+  stateLive: '已连接',
+  stateHistory: '正在查看历史弹幕',
+  stateIdle: '未连接',
   noRooms: '还没有监控中的直播间',
   waitingNew: '等待新弹幕…',
   minimizeWindow: '最小化',
@@ -146,6 +166,16 @@ export const en: Dictionary = {
   rename: 'Rename',
   renameHint: 'Double-click to rename',
   renameReset: 'Use the room title',
+  resizeHint: 'Drag to resize',
+  offlineHint: 'This room is not live',
+  offlinePlaceholder: 'This room is not live',
+  viewDanmaku: 'View danmaku',
+  stateOffline: 'Not live',
+  stateOfflineViewing: 'Not live (viewing danmaku)',
+  stateError: 'Connection failed',
+  stateLive: 'Connected',
+  stateHistory: 'Reading history danmaku',
+  stateIdle: 'Not connected',
   noRooms: 'No rooms are being monitored',
   waitingNew: 'Waiting for new danmaku…',
   minimizeWindow: 'Minimize',
