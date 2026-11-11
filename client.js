@@ -126,6 +126,11 @@ window.__ModuleLoader__.load({
       }
       function colorOf(value) {
         if (!Number.isFinite(value) || value <= 0) return null;
+        const red = value >> 16 & 255;
+        const green = value >> 8 & 255;
+        const blue = value & 255;
+        const luma = (red * 299 + green * 587 + blue * 114) / 1e3;
+        if (luma > 0.86 * 255) return null;
         return "#" + value.toString(16).padStart(6, "0");
       }
 
@@ -1348,7 +1353,7 @@ window.__ModuleLoader__.load({
         hideWindow: "收到悬浮窗",
         removeRoom: "退出监控",
         rename: "重命名",
-        renameHint: "临时标题，重启 dsh 后恢复为直播间标题",
+        renameHint: "双击修改标题",
         renameReset: "恢复原标题",
         noRooms: "还没有监控中的直播间",
         waitingNew: "等待新弹幕…",
@@ -1394,7 +1399,7 @@ window.__ModuleLoader__.load({
         hideWindow: "Put in the ball",
         removeRoom: "Stop monitoring",
         rename: "Rename",
-        renameHint: "Temporary title; restores the room title on dsh restart",
+        renameHint: "Double-click to rename",
         renameReset: "Use the room title",
         noRooms: "No rooms are being monitored",
         waitingNew: "Waiting for new danmaku…",
@@ -1412,6 +1417,8 @@ window.__ModuleLoader__.load({
       var IDLE_FADE_MS2 = 5e3;
       var MINIMIZED_STEP = 42;
       var MAX_TITLE = 40;
+      var DRAG_SLOP2 = 4;
+      var DOUBLE_CLICK_MS = 400;
       var MIN_SUMMARY_CHARS = 48;
       var MAX_NAME_CHARS = 8;
       var MAX_NAME_FRACTION = "40%";
@@ -1530,6 +1537,9 @@ window.__ModuleLoader__.load({
         const [dragging, setDragging] = (0, import_react3.useState)(null);
         const latestRef = (0, import_react3.useRef)(null);
         const dragOriginRef = (0, import_react3.useRef)(null);
+        const draggedRef = (0, import_react3.useRef)(false);
+        const pressTargetRef = (0, import_react3.useRef)(null);
+        const lastTitlePressRef = (0, import_react3.useRef)(0);
         const idleTimer = (0, import_react3.useRef)(0);
         const minimized = instance.view === "minimized";
         const newest = instance.items[instance.items.length - 1];
@@ -1559,12 +1569,19 @@ window.__ModuleLoader__.load({
           if (!rect) return;
           dragRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
           dragOriginRef.current = { x: event.clientX, y: event.clientY };
+          draggedRef.current = false;
+          pressTargetRef.current = event.target;
           event.currentTarget.setPointerCapture?.(event.pointerId);
         }, []);
         const onPointerMove = (0, import_react3.useCallback)((event) => {
           if (!dragRef.current) return;
           const node = cardRef.current;
           if (!node) return;
+          const origin = dragOriginRef.current;
+          if (origin === null) return;
+          const travel = Math.abs(event.clientX - origin.x) + Math.abs(event.clientY - origin.y);
+          if (travel < DRAG_SLOP2) return;
+          draggedRef.current = true;
           const width = node.offsetWidth;
           const height = node.offsetHeight;
           const x = Math.max(4, Math.min(window.innerWidth - width - 4, event.clientX - dragRef.current.dx));
@@ -1579,9 +1596,25 @@ window.__ModuleLoader__.load({
           event.currentTarget.releasePointerCapture?.(event.pointerId);
           const landed = latestRef.current;
           latestRef.current = null;
+          const target = pressTargetRef.current;
+          pressTargetRef.current = null;
+          const moved = draggedRef.current;
+          draggedRef.current = false;
           setDragging(null);
           if (landed !== null) props.onDragEnd(landed);
-        }, [props]);
+          if (!moved && target !== null && target.closest("[data-rename]") !== null) {
+            const now = event.timeStamp;
+            if (now - lastTitlePressRef.current < DOUBLE_CLICK_MS) {
+              lastTitlePressRef.current = 0;
+              setTitleDraft(instance.alias);
+              setEditing(true);
+            } else {
+              lastTitlePressRef.current = now;
+            }
+          } else {
+            lastTitlePressRef.current = 0;
+          }
+        }, [props, instance.alias]);
         const submit = (0, import_react3.useCallback)(async () => {
           const text = reply.trim();
           if (text === "" || replyState === "sending") return;
@@ -1693,12 +1726,8 @@ window.__ModuleLoader__.load({
                     ) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
                       "span",
                       {
-                        "data-no-drag": true,
-                        onDoubleClick: () => {
-                          setTitleDraft(instance.alias);
-                          setEditing(true);
-                        },
-                        title: showPreview ? newestLine : instance.alias ? t("renameHint") : instance.liveTitle,
+                        "data-rename": true,
+                        title: showPreview ? newestLine : t("renameHint"),
                         style: {
                           flex: "1 1 auto",
                           minWidth: 0,
@@ -1710,7 +1739,7 @@ window.__ModuleLoader__.load({
                           // distinguishable while the layout does not move at all.
                           fontWeight: showPreview ? 400 : 600,
                           color: showPreview ? "var(--dsw-alias-label-secondary, #666)" : "var(--dsw-alias-label-primary, #222)",
-                          cursor: "text"
+                          cursor: dragging ? "grabbing" : "grab"
                         },
                         children: showPreview ? newestLine : windowLabel(instance)
                       }

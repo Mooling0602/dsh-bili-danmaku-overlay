@@ -40,6 +40,12 @@ const MINIMIZED_STEP = 42
 /** Longest title accepted from the user. */
 const MAX_TITLE = 40
 
+/** Pointer travel, in pixels, that separates a drag from a press that only selects. */
+const DRAG_SLOP = 4
+
+/** Largest gap between two still presses on the title that counts as a double click. */
+const DOUBLE_CLICK_MS = 400
+
 /** Longest summary line in a minimized window, in characters. */
 const MIN_SUMMARY_CHARS = 48
 
@@ -231,6 +237,20 @@ export function DanmakuWindow(props: WindowProps) {
   const latestRef = useRef<{ x: number; y: number } | null>(null)
   /** Pointer position at pointerdown, used to tell a drag from a click. */
   const dragOriginRef = useRef<{ x: number; y: number } | null>(null)
+  /**
+   * Whether the gesture that just ended actually moved the window. A drag ends
+   * with a click event too, and without this the release would be read as a
+   * click on whatever the pointer happened to land on.
+   */
+  const draggedRef = useRef(false)
+  /**
+   * What the pointer went down on. Pointer capture retargets the click that
+   * ends the gesture to the capturing element, so the element under the
+   * pointer has to be remembered here rather than read from the click.
+   */
+  const pressTargetRef = useRef<HTMLElement | null>(null)
+  /** Time of the last still press on the title, for recognising a double click. */
+  const lastTitlePressRef = useRef(0)
   const idleTimer = useRef(0)
 
   const minimized = instance.view === 'minimized'
@@ -272,6 +292,8 @@ export function DanmakuWindow(props: WindowProps) {
     if (!rect) return
     dragRef.current = { dx: event.clientX - rect.left, dy: event.clientY - rect.top }
     dragOriginRef.current = { x: event.clientX, y: event.clientY }
+    draggedRef.current = false
+    pressTargetRef.current = event.target as HTMLElement
     event.currentTarget.setPointerCapture?.(event.pointerId)
   }, [])
 
@@ -279,6 +301,13 @@ export function DanmakuWindow(props: WindowProps) {
     if (!dragRef.current) return
     const node = cardRef.current
     if (!node) return
+    const origin = dragOriginRef.current
+    if (origin === null) return
+    const travel = Math.abs(event.clientX - origin.x) + Math.abs(event.clientY - origin.y)
+    // Below the slop the pointer has not really travelled, so the press still
+    // reads as a click on whatever it landed on, such as the title.
+    if (travel < DRAG_SLOP) return
+    draggedRef.current = true
     const width = node.offsetWidth
     const height = node.offsetHeight
     const x = Math.max(4, Math.min(window.innerWidth - width - 4, event.clientX - dragRef.current.dx))
@@ -296,9 +325,28 @@ export function DanmakuWindow(props: WindowProps) {
     // measurement would race the state update that clears the drag.
     const landed = latestRef.current
     latestRef.current = null
+    const target = pressTargetRef.current
+    pressTargetRef.current = null
+    const moved = draggedRef.current
+    draggedRef.current = false
     setDragging(null)
     if (landed !== null) props.onDragEnd(landed)
-  }, [props])
+    // A title press that never moved counts toward a double click, which opens
+    // the rename input. Reading the gesture here rather than from a click
+    // handler keeps it working through pointer capture.
+    if (!moved && target !== null && target.closest('[data-rename]') !== null) {
+      const now = event.timeStamp
+      if (now - lastTitlePressRef.current < DOUBLE_CLICK_MS) {
+        lastTitlePressRef.current = 0
+        setTitleDraft(instance.alias)
+        setEditing(true)
+      } else {
+        lastTitlePressRef.current = now
+      }
+    } else {
+      lastTitlePressRef.current = 0
+    }
+  }, [props, instance.alias])
 
   const submit = useCallback(async () => {
     const text = reply.trim()
@@ -418,12 +466,8 @@ export function DanmakuWindow(props: WindowProps) {
           />
         ) : (
           <span
-            data-no-drag
-            onDoubleClick={() => {
-              setTitleDraft(instance.alias)
-              setEditing(true)
-            }}
-            title={showPreview ? newestLine : instance.alias ? t('renameHint') : instance.liveTitle}
+            data-rename
+            title={showPreview ? newestLine : t('renameHint')}
             style={{
               flex: '1 1 auto',
               minWidth: 0,
@@ -437,7 +481,7 @@ export function DanmakuWindow(props: WindowProps) {
               color: showPreview
                 ? 'var(--dsw-alias-label-secondary, #666)'
                 : 'var(--dsw-alias-label-primary, #222)',
-              cursor: 'text',
+              cursor: dragging ? 'grabbing' : 'grab',
             }}
           >
             {showPreview ? newestLine : windowLabel(instance)}

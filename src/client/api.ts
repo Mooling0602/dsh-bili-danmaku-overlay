@@ -226,10 +226,22 @@ export async function sendReply(
 /**
  * Convert a Bilibili RGB integer into a CSS colour.
  *
+ * The live player draws danmaku on a dark video, so the default colour is pure
+ * white. Rendered on the overlay's light card that colour is invisible, so a
+ * colour too close to white falls back to `null`, which lets the row use the
+ * theme's own text colour. Any darker colour the sender chose is kept.
+ *
  * @param value - the integer from the message.
- * @returns a `#rrggbb` string, or `null` when the colour is unset.
+ * @returns a `#rrggbb` string, or `null` when the colour is unset or too light to read.
  */
 export function colorOf(value: number): string | null {
   if (!Number.isFinite(value) || value <= 0) return null
+  const red = (value >> 16) & 0xff
+  const green = (value >> 8) & 0xff
+  const blue = value & 0xff
+  // Rec. 601 luma: green dominates perceived brightness, so a plain channel
+  // average would keep a saturated yellow that the eye reads as near white.
+  const luma = (red * 299 + green * 587 + blue * 114) / 1000
+  if (luma > 0.86 * 255) return null
   return '#' + value.toString(16).padStart(6, '0')
 }
