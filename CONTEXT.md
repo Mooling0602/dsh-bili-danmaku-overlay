@@ -58,6 +58,14 @@ The target state is a source-only repository, where the build generates both fil
 
 Until then, every commit that touches `src/` or `host.ts` carries the matching rebuild. The removal condition is the first release, and nothing about this arrangement is a decision about the plugin's final packaging.
 
+### No `prepare` script while the output is committed
+
+`package.json` declares only `build` and `typecheck`. It must not declare `prepare`, because the package ships its own `index.js` and `client.js` and has nothing to build at install time.
+
+A `prepare` script is not merely redundant here, it breaks installation. pnpm treats it as a build script on a git-hosted dependency and refuses to run it without an entry in `allowBuilds`, so the install stops to ask the user to trust the package. The prompt is the thing a user sees first, and it appears for a plugin that needs no code generation at all. Granting it does not help either: pnpm does not install `devDependencies` for a git dependency, `build.mjs` imports `esbuild`, and the script therefore fails with `ERR_MODULE_NOT_FOUND`. Approving turns a successful install into a failed one.
+
+The siblings that do carry `prepare` are source-only repositories, where the script is how `dist` comes into existence. This repository is not one of them while its output stays in Git, so the script has no work to do. Adding it belongs to the same release work that flips the repository to source-only: at that point it becomes necessary, and it arrives together with the `dist` entry that replaces the committed files.
+
 ## Host side
 
 ### Configuration
