@@ -33,6 +33,12 @@ export type CopyKey =
   | 'sent'
   | 'noCredential'
   | 'credentialHint'
+  | 'credential'
+  | 'credentialMissing'
+  | 'credentialExpired'
+  | 'credentialValid'
+  | 'credentialUnknown'
+  | 'credentialNoCsrf'
   | 'hostNotReady'
   | 'sendFailed'
   | 'refresh'
@@ -61,6 +67,7 @@ export type CopyKey =
   | 'recentRooms'
   | 'configuredRoom'
   | 'openRoom'
+  | 'forgetRoom'
   | 'waitingNew'
   | 'minimizeWindow'
   | 'ungroupAll'
@@ -96,6 +103,12 @@ export const zh: Dictionary = {
   sent: '已发送',
   noCredential: '未配置登录凭据，无法发言',
   credentialHint: '凭据缺少 bili_jct，无法发言',
+  credential: '登录凭据',
+  credentialMissing: '未配置',
+  credentialExpired: '已失效，请更新',
+  credentialValid: '有效',
+  credentialUnknown: '无法验证',
+  credentialNoCsrf: '缺少发言令牌',
   hostNotReady: '插件后端未就绪，请重启 dsh 服务',
   sendFailed: '发送失败',
   refresh: '刷新弹幕',
@@ -125,6 +138,7 @@ export const zh: Dictionary = {
   recentRooms: '最近连接',
   configuredRoom: '默认直播间',
   openRoom: '打开',
+  forgetRoom: '从最近连接移除',
   waitingNew: '等待新弹幕…',
   minimizeWindow: '最小化',
   ungroupAll: '全部收到悬浮窗',
@@ -158,6 +172,12 @@ export const en: Dictionary = {
   sent: 'Sent',
   noCredential: 'No login credential configured',
   credentialHint: 'Credential is missing bili_jct',
+  credential: 'Login',
+  credentialMissing: 'not configured',
+  credentialExpired: 'expired, please update',
+  credentialValid: 'valid',
+  credentialUnknown: 'could not verify',
+  credentialNoCsrf: 'missing send token',
   hostNotReady: 'Plugin backend not ready, restart the dsh service',
   sendFailed: 'Send failed',
   refresh: 'Refresh danmaku',
@@ -186,6 +206,7 @@ export const en: Dictionary = {
   recentRooms: 'Recently connected',
   configuredRoom: 'Default room',
   openRoom: 'Open',
+  forgetRoom: 'Remove from recently connected',
   waitingNew: 'Waiting for new danmaku…',
   minimizeWindow: 'Minimize',
   ungroupAll: 'Put all in the ball',

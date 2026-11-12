@@ -125,7 +125,12 @@ export async function route(
   const limits = readLimits(config)
 
   if (path === '/api/credential' && request.method === 'GET') {
-    sendJson(response, 200, credentialStatus())
+    // The session check is a real upstream call, so it is budgeted like any other
+    // request rather than left to hang. A slow check still answers, with the
+    // verdict left unknown, because telling the page nothing is worse than telling
+    // it the truth was unavailable.
+    const status = await credentialStatus(limits.requestTimeoutMs)
+    sendJson(response, 200, status)
     return
   }
 

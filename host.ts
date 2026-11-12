@@ -17,13 +17,14 @@
 
 import type { HostPluginContext } from './src/types.ts'
 import { BiliError } from './src/credentials.ts'
+import { registerDebugTools } from './src/debug.ts'
 import { ROUTE_PREFIX, route } from './src/routes.ts'
 import type { Config } from './src/config.ts'
 
 export { Config } from './src/config.ts'
 
 /** Services this plugin needs mounted before `apply` runs. */
-export const inject = ['webServer']
+export const inject = ['webServer', 'tools']
 
 /**
  * Mount the overlay's routes.
@@ -66,4 +67,10 @@ export function apply(ctx: HostPluginContext, config?: Partial<Config>): void {
       }),
     'bili-danmaku-overlay: Bilibili danmaku routes',
   )
+
+  // The registry is a hard dependency, so `ctx.tools` is always present here.
+  ctx.effect(() => {
+    const dispose = registerDebugTools(ctx.tools)
+    return dispose
+  }, 'bili-danmaku-overlay: debug tools')
 }

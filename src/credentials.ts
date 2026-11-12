@@ -17,9 +17,12 @@
  *
  * ── What crosses the wire ──────────────────────────────────────────────────
  *
- * `credentialStatus()` returns booleans only — whether a session and a csrf token
- * are present — never a prefix, a length, or a hash of either. The page needs to
- * know if it may offer a send box, and nothing more.
+ * `credentialStatus()` reports whether a session and a csrf token are present,
+ * and whether Bilibili still accepts them, never a prefix, a length, or a hash of
+ * either. The account name is included once the session is confirmed, because the
+ * page shows it as the evidence that the login works; nothing else about the token
+ * is sent. The page needs to know if it may offer a send box and who it would send
+ * as, and nothing more.
  */
 
 import { readFileSync } from 'node:fs'
@@ -27,6 +30,15 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 import { CSRF_REF, SESSDATA_REF } from './config.ts'
+
+/**
+ * User agent for the session check.
+ *
+ * Declared here rather than imported from `bili.ts`, which already imports this
+ * module; the reverse edge would make the two cycle.
+ */
+const CHECK_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
 /** A failure the page should show verbatim instead of a generic 500. */
 export class BiliError extends Error {
@@ -50,10 +62,28 @@ export const CREDENTIAL_FILE = join(homedir(), '.dsh', '.credentials.yaml')
 /** What the page is told about credential availability; booleans only. */
 export interface CredentialStatus {
   readonly ok: boolean
+  /**
+   * Whether a session token and a csrf token are both present in the file.
+   *
+   * This says the file is populated, not that the session works. Check `valid`
+   * before treating the credential as usable.
+   */
   readonly configured: boolean
   readonly hasSessdata: boolean
   readonly hasCsrf: boolean
   readonly csrfRef: string
+  /**
+   * Result of checking the stored session against Bilibili.
+   *
+   * `unknown` means the check could not run, which is not the same as a rejected
+   * session: a network failure must not tell the user to replace a working token.
+   */
+  readonly valid: 'yes' | 'no' | 'unknown'
+  /** Display name of the signed in account, present only when `valid` is `yes`. */
+  readonly uname?: string
+  /** Why the session was rejected, present only when `valid` is `no`. */
+  readonly reason?: string
+  /** A local failure, such as a missing or unreadable credential file. */
   readonly error?: string
 }
 
@@ -164,20 +194,18 @@ export function buildCookie(): string {
  * Never throws: a failure is itself an answer the page renders as "not
  * configured", which is more useful than a failed request.
  *
- * @returns the availability flags.
+ * Presence and validity are separate answers. A file can hold a correctly shaped
+ * token whose session has expired, and that case used to read as healthy here,
+ * which made a dead login indistinguishable from a working one. The optional
+ * check below is what separates them.
+ *
+ * @param timeoutMs - budget for the session check, or 0 to skip it entirely.
+ * @returns the availability flags, plus the session verdict when checked.
  */
-export function credentialStatus(): CredentialStatus {
+export async function credentialStatus(timeoutMs = 0): Promise<CredentialStatus> {
+  let cookie: string
   try {
-    const cookie = buildCookie()
-    const hasSess = cookieValue(cookie, 'SESSDATA') !== ''
-    const hasCsrf = cookieValue(cookie, 'bili_jct') !== ''
-    return {
-      ok: true,
-      configured: hasSess,
-      hasSessdata: hasSess,
-      hasCsrf,
-      csrfRef: CSRF_REF,
-    }
+    cookie = buildCookie()
   } catch (error) {
     return {
       ok: true,
@@ -185,7 +213,69 @@ export function credentialStatus(): CredentialStatus {
       hasSessdata: false,
       hasCsrf: false,
       csrfRef: CSRF_REF,
+      valid: 'no',
       error: error instanceof Error && error.message !== '' ? error.message : '未配置登录凭据',
     }
+  }
+
+  const hasSess = cookieValue(cookie, 'SESSDATA') !== ''
+  const hasCsrf = cookieValue(cookie, 'bili_jct') !== ''
+  const base: CredentialStatus = {
+    ok: true,
+    configured: hasSess,
+    hasSessdata: hasSess,
+    hasCsrf,
+    csrfRef: CSRF_REF,
+    valid: 'unknown',
+  }
+  if (!hasSess || timeoutMs <= 0) return base
+
+  const session = await checkSession(cookie, timeoutMs)
+  return { ...base, ...session }
+}
+
+/**
+ * Ask Bilibili whether the stored cookie is still a live session.
+ *
+ * The `nav` endpoint is the cheapest honest answer available: it returns the
+ * account name for a working session and `-101` for a token that has expired or
+ * been revoked. Nothing is written and no room is touched.
+ *
+ * @param cookie - the Cookie header to test.
+ * @param timeoutMs - request budget.
+ * @returns the verdict, plus the account name or the rejection reason.
+ */
+async function checkSession(
+  cookie: string,
+  timeoutMs: number,
+): Promise<Pick<CredentialStatus, 'valid' | 'uname' | 'reason'>> {
+  try {
+    const response = await fetch('https://api.bilibili.com/x/web-interface/nav', {
+      headers: {
+        'User-Agent': CHECK_UA,
+        Referer: 'https://www.bilibili.com/',
+        Cookie: cookie,
+      },
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    const payload = (await response.json().catch(() => null)) as {
+      code?: number
+      message?: string
+      data?: { isLogin?: boolean; uname?: string }
+    } | null
+
+    // A response we cannot read is not evidence either way, so the token is left
+    // neither confirmed nor condemned.
+    if (!payload) return { valid: 'unknown' }
+    if (payload.code === 0 && payload.data?.isLogin === true) {
+      const uname = String(payload.data.uname ?? '').trim()
+      return uname === '' ? { valid: 'yes' } : { valid: 'yes', uname }
+    }
+    if (payload.code === -101) {
+      return { valid: 'no', reason: '登录态已过期，请更新凭据中的 session token' }
+    }
+    return { valid: 'unknown' }
+  } catch {
+    return { valid: 'unknown' }
   }
 }

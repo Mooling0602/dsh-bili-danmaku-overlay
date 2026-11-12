@@ -49,7 +49,14 @@ import {
   type SavedState,
   withRecentRoom,
 } from './api.ts'
-import { FloatingBall, DEFAULT_BALL_SIZE, MIN_BALL_SIZE, MAX_BALL_SIZE, type RoomCandidate } from './ball.tsx'
+import {
+  FloatingBall,
+  DEFAULT_BALL_SIZE,
+  MIN_BALL_SIZE,
+  MAX_BALL_SIZE,
+  type MenuBox,
+  type RoomCandidate,
+} from './ball.tsx'
 import { RoomStore, type RoomInstance, type RoomView } from './rooms.ts'
 import { DanmakuWindow } from './window.tsx'
 
@@ -207,6 +214,16 @@ export function Overlay(props: OverlayProps) {
 
   const ballSize = front.ballSize
   const windowSize = { width: front.width, height: front.height }
+  /**
+   * The size the ball menu was dragged to, or null while it is untouched.
+   *
+   * This is deliberately not persisted. The menu is a transient surface the reader
+   * opens to pick a room, and a size that survived a reload would leave it opening
+   * at a shape nobody could explain, because the drag that produced it belongs to a
+   * moment rather than to a preference. The danmaku windows keep their size because
+   * they stay on screen; the menu does not.
+   */
+  const [menuBox, setMenuBox] = useState<MenuBox | null>(null)
   const [ballPlace, setBallPlace] = useState<{ x: number; y: number } | null>(
     saved.ballPlace ?? null,
   )
@@ -272,6 +289,19 @@ export function Overlay(props: OverlayProps) {
       disposed = true
     }
   }, [adoptBoot])
+
+  /**
+   * Re-read the credential, and keep the menu's reading current.
+   *
+   * The check is a real upstream call, so it is not put on a timer: a session
+   * does not expire between two breaths, and a background poll would cost a
+   * request per interval for an answer that changes rarely. Opening the menu is
+   * the moment the user is asking about it, so that is when it refreshes, along
+   * with the once-per-load read that fills the reply box.
+   */
+  const refreshCredential = useCallback((): void => {
+    void fetchCredential().then((next) => setCredential(next))
+  }, [])
 
   useEffect(() => {
     let disposed = false
@@ -387,6 +417,23 @@ export function Overlay(props: OverlayProps) {
       ballPlace: placeRef.current,
       host: bootSeen.current,
     } satisfies SavedState)
+  }, [])
+
+  /**
+   * Drop one room from the recent list.
+   *
+   * This cannot go through `persist`, because that function folds every monitored room
+   * back into `recentRooms` as a side effect of saving the layout, which would undo the
+   * removal for a room that is still monitored. The list it writes has to be the list
+   * minus this room, whatever is currently open.
+   *
+   * @param room - the room id to forget.
+   */
+  const forgetRoom = useCallback((room: string) => {
+    const saved = loadState()
+    const next = (saved.recentRooms ?? []).filter((entry) => entry.room !== room)
+    saveState({ ...saved, recentRooms: next })
+    setRecent((previous) => previous.filter((entry) => entry.room !== room))
   }, [])
 
   // Rooms notify individually, so the list of keys and the per-room snapshots are
@@ -604,6 +651,9 @@ export function Overlay(props: OverlayProps) {
           uiScale={front.uiScale}
           onResizeEnd={(size) => {
             saveState({ ...loadState(), windowWidth: size.width, windowHeight: size.height })
+            // A left-edge drag moves the card as well as resizing it, so the place has
+            // to be written back or the card would jump to its old x on the next render.
+            if (size.place !== null && size.place !== instance.place) dragRoom(instance.key, size.place)
           }}
         />
       ))}
@@ -612,15 +662,26 @@ export function Overlay(props: OverlayProps) {
         rooms={instances}
         candidates={candidates}
         configuredRoom={config.defaultRoom}
+        credential={credential}
+        menuBox={menuBox}
+        onMenuResize={setMenuBox}
         size={ballSize}
         uiScale={front.uiScale}
         open={menuOpen}
-        onToggleMenu={() => setMenuOpen((value) => !value)}
+        onToggleMenu={() => {
+          // Opening the menu is the moment the user is asking about the login, so
+          // the reading is refreshed then rather than left as it was at load.
+          setMenuOpen((value) => {
+            if (!value) refreshCredential()
+            return !value
+          })
+        }}
         onShowWindow={(key) => setView(key, 'window')}
         onHideWindow={(key) => setView(key, 'hidden')}
         onRemove={removeRoom}
         onRename={renameRoom}
         onAddRoom={addRoom}
+        onForgetRoom={forgetRoom}
         onShowAll={showAll}
         onHideAll={hideAll}
         place={ballPlace}

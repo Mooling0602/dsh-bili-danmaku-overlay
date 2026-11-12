@@ -20,6 +20,44 @@ export interface HostPluginContext {
   effect(effect: () => (() => void) | void, label?: string): void
   /** The HTTP server the Harness page is served from. */
   webServer: WebServer
+  /** The tool registry, mounted because `inject` lists `tools`. */
+  tools: Tools
+}
+
+/** The Harness `tools` registry surface this plugin uses. */
+export interface Tools {
+  /**
+   * Register one tool for the calling agent.
+   *
+   * @param definition - the tool schema and its execution.
+   * @returns the disposer that unregisters it.
+   */
+  register(definition: ToolDefinition): () => void
+}
+
+/**
+ * One tool the agent can call.
+ *
+ * Only the fields this plugin sets are declared. The Harness treats the rest as
+ * optional, so a definition that leaves them out still registers.
+ */
+export interface ToolDefinition {
+  /** The name the model calls. */
+  readonly name: string
+  /** What the tool is for, shown to the model. */
+  readonly description: string
+  /** JSON Schema for the arguments. */
+  readonly parameters: Record<string, unknown>
+  /**
+   * Run the tool.
+   *
+   * @param args - the arguments, already validated against `parameters` by the shape below.
+   * @returns any JSON-serializable result.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly execute: (args: any) => unknown | Promise<unknown>
+  /** How the result is projected, when the registry asks for it. */
+  readonly output?: Record<string, unknown>
 }
 
 /** The Harness `webServer` service surface. */

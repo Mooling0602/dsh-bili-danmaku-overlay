@@ -20,7 +20,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type React from 'react'
 
+import { clampLength } from './api.ts'
+import type { Credential } from './api.ts'
 import type { CopyKey } from './copy.ts'
 import { CloseIcon, EditIcon, HidePanelIcon, ShowPanelIcon } from './icons.tsx'
 import { aggregateState, stateTone } from './rooms.ts'
@@ -124,11 +127,35 @@ export interface BallProps {
   readonly onRemove: (key: string) => void
   readonly onRename: (key: string, alias: string) => void
   readonly onAddRoom: (room: string) => void
+  /**
+   * Drop a room from the recent list without opening it.
+   *
+   * The list is a convenience, so a room that was mistyped or is no longer wanted has
+   * to be removable, otherwise the only way to clear it is to open the room first.
+   */
+  readonly onForgetRoom: (room: string) => void
   readonly onShowAll: () => void
   readonly onHideAll: () => void
   /** Where the ball sits; null keeps the default bottom-right corner. */
   readonly place: { readonly x: number; readonly y: number } | null
   readonly onDragEnd: (place: { x: number; y: number }) => void
+  /**
+   * The stored login, as the menu reports it.
+   *
+   * The menu is where a user looks when sending or history misbehaves, so it is
+   * the place that has to say whether the credential is merely present or
+   * actually working. `null` means the check has not answered yet.
+   */
+  readonly credential: Credential | null
+  /**
+   * The menu size the user dragged, or null to follow the default.
+   *
+   * The menu is the only surface the ball offers, so its size is a layout choice
+   * the reader keeps rather than a per-session detail.
+   */
+  readonly menuBox: MenuBox | null
+  /** Called when a resize gesture ends, with the size it reached. */
+  readonly onMenuResize: (size: MenuBox) => void
 }
 
 /**
@@ -151,6 +178,152 @@ const SAFE = 12
 
 /** Preferred menu width; narrowed automatically on a small screen. */
 const MENU_WIDTH = 268
+
+/** Narrowest the menu may be dragged, which still fits a room row and its buttons. */
+const MIN_MENU_WIDTH = 220
+
+/** Widest the menu may be dragged, so it never becomes a second full screen panel. */
+const MAX_MENU_WIDTH = 460
+
+/** Shortest the menu may be dragged, which still shows a few rooms and the input row. */
+const MIN_MENU_HEIGHT = 180
+
+/** Tallest the menu may be dragged; the viewport still caps it at render time. */
+const MAX_MENU_HEIGHT = 720
+
+/** The height a menu opens at before anyone resizes it. */
+const DEFAULT_MENU_HEIGHT = 520
+
+/** One menu size, in pixels. */
+export interface MenuBox {
+  readonly width: number
+  readonly height: number
+}
+
+/** The size an untouched menu opens at. */
+const DEFAULT_MENU_BOX: MenuBox = { width: MENU_WIDTH, height: DEFAULT_MENU_HEIGHT }
+
+/**
+ * The pointer shape for each moving corner of the menu.
+ *
+ * The corner the grip sits on is the one that travels, so the arrow axis follows
+ * that corner rather than the drag direction: a grip at the bottom right grows both
+ * ways, and one at the top left grows up and left.
+ */
+const GRIP_CURSOR = {
+  'below-left': 'nesw-resize',
+  'below-right': 'nwse-resize',
+  'above-left': 'nwse-resize',
+  'above-right': 'nesw-resize',
+} as const
+
+/** Two short strokes pointing into the corner the grip occupies. */
+function gripStrokes(angle: number): string {
+  const tone = 'var(--dsw-alias-label-tertiary, #bbb)'
+  return `linear-gradient(${angle}deg, transparent 45%, ${tone} 45%, ${tone} 55%, transparent 55%), linear-gradient(${angle}deg, transparent 68%, ${tone} 68%, ${tone} 78%, transparent 78%)`
+}
+
+/** The stroke direction for each moving corner, matching its resize axis. */
+const GRIP_STROKES = {
+  'below-left': gripStrokes(45),
+  'below-right': gripStrokes(135),
+  'above-left': gripStrokes(135),
+  'above-right': gripStrokes(45),
+} as const
+
+/**
+ * One line reporting the stored login.
+ *
+ * The distinction this row exists to draw is between a credential that is present
+ * and one that works. A token can sit in the file with the right shape and be
+ * rejected upstream, and that state used to look identical to a healthy one:
+ * sending failed with a generic error and history came back empty, with nothing on
+ * screen naming the cause. A rejected session therefore gets the error colour and
+ * an explicit instruction, while an unverified one stays neutral so a network
+ * failure during the check does not send the user off to replace a working token.
+ *
+ * @param props - the credential snapshot, or null before the check answers.
+ * @returns the row, always rendered so its absence is never mistaken for health.
+ */
+function CredentialRow({
+  credential,
+  ds,
+  t,
+}: {
+  readonly credential: Credential | null
+  readonly ds: (value: number) => number
+  readonly t: (key: CopyKey) => string
+}): React.ReactElement {
+  let label: string
+  let tone: string
+  let detail = ''
+
+  if (!credential) {
+    label = t('credential')
+    tone = 'var(--dsw-alias-label-tertiary, #999)'
+    detail = t('credentialUnknown')
+  } else if (!credential.configured) {
+    label = t('credential')
+    tone = 'var(--dsw-alias-state-error-primary, #ef4444)'
+    detail = credential.error ?? t('credentialMissing')
+  } else if (credential.valid === 'no') {
+    label = t('credential')
+    tone = 'var(--dsw-alias-state-error-primary, #ef4444)'
+    detail = credential.reason ?? t('credentialExpired')
+  } else if (credential.valid === 'yes' && credential.hasCsrf === false) {
+    label = t('credential')
+    tone = 'var(--dsw-alias-state-warn-primary, #f59e0b)'
+    detail = credential.uname ? `${credential.uname}: ${t('credentialNoCsrf')}` : t('credentialNoCsrf')
+  } else if (credential.valid === 'yes') {
+    label = t('credential')
+    tone = 'var(--dsw-alias-state-success-primary, #22c55e)'
+    detail = credential.uname ? `${t('credentialValid')} · ${credential.uname}` : t('credentialValid')
+  } else {
+    label = t('credential')
+    tone = 'var(--dsw-alias-label-tertiary, #999)'
+    detail = t('credentialUnknown')
+  }
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: ds(6),
+        padding: `${ds(7)}px ${ds(11)}px`,
+        borderTop: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))',
+      }}
+      title={detail}
+    >
+      <span
+        style={{
+          width: ds(7),
+          height: ds(7),
+          borderRadius: 999,
+          flex: '0 0 auto',
+          background: tone,
+        }}
+      />
+      <span style={{ fontSize: ds(11), color: 'var(--dsw-alias-label-tertiary, #999)', flex: '0 0 auto' }}>
+        {label}
+      </span>
+      <span
+        style={{
+          flex: '1 1 auto',
+          minWidth: 0,
+          fontSize: ds(11),
+          color: tone,
+          textAlign: 'right',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {detail}
+      </span>
+    </div>
+  )
+}
 
 export function FloatingBall(props: BallProps) {
   const { t, rooms, size } = props
@@ -214,6 +387,35 @@ export function FloatingBall(props: BallProps) {
   const latestRef = useRef<{ x: number; y: number } | null>(null)
 
   /**
+   * The size a resize gesture has reached so far, or null when not resizing.
+   *
+   * Held in state for the same reason a danmaku window holds its own: the ball
+   * re-renders on every new danmaku, so a size written only to the DOM would be
+   * reset from the stored value on the next render.
+   */
+  const [menuResizing, setMenuResizing] = useState<MenuBox | null>(null)
+  /** Size at pointerdown and the pointer origin, used to compute the new size. */
+  const menuResizeRef = useRef<{ width: number; height: number; x: number; y: number } | null>(null)
+  /**
+   * The menu's current on-screen size, refreshed on every render.
+   *
+   * The gesture handlers are declared before the layout that computes this value,
+   * so they read it through a ref rather than capturing it. A gesture always starts
+   * from what is on screen, which is what the reader sees at the moment of the
+   * press, not from the stored preference it may have been clamped away from.
+   */
+  const menuBoxRef = useRef<MenuBox>(DEFAULT_MENU_BOX)
+  /**
+   * The menu element, measured when a gesture begins.
+   *
+   * The box in state is the height the menu is allowed to reach, not the height it is
+   * currently drawn at: an untouched menu sizes itself to its content and can be far
+   * shorter than the cap. Starting a gesture from the cap would snap the menu to that
+   * height on the press, so the true box is read off the DOM instead.
+   */
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  /**
    * Choose which side the menu unfolds towards.
    *
    * A menu opening towards the nearest edge would be cut off or pushed back over
@@ -229,6 +431,86 @@ export function FloatingBall(props: BallProps) {
     // Left half of the screen opens rightwards, right half leftwards.
     return centre > viewport.w / 2 ? 'left' : 'right'
   }, [size, viewport.w])
+
+  /**
+   * Start a resize from the menu's inner corner.
+   *
+   * The menu grows away from the edge the ball sits near, so the corner with room
+   * to drag into depends on which side it unfolded towards. That side is passed in
+   * rather than measured, because the caller already resolved it for positioning.
+   *
+   * @param side - the direction the menu unfolded towards.
+   * @returns the pointerdown handler for the grip on that side.
+   */
+  const onMenuResizeDown = useCallback(
+    (side: 'left' | 'right') =>
+      (event: React.PointerEvent<HTMLDivElement>): void => {
+        event.stopPropagation()
+        event.preventDefault()
+        // Measure the menu as drawn, because the box in state is the height it may
+        // reach rather than the height it occupies. Starting from that cap is what
+        // makes an untouched menu jump taller the moment the grip is pressed. The
+        // measurement is in CSS pixels and every length here is a logical one that
+        // `ds` scales, so it is divided back before it can be rescaled on the way out.
+        const zoom = props.uiScale / 100
+        const rect = menuRef.current?.getBoundingClientRect()
+        const current =
+          rect === undefined
+            ? menuBoxRef.current
+            : { width: Math.round(rect.width / zoom), height: Math.round(rect.height / zoom) }
+        menuResizeRef.current = { width: current.width, height: current.height, x: event.clientX, y: event.clientY }
+        setMenuResizing(current)
+        event.currentTarget.setPointerCapture?.(event.pointerId)
+        void side
+      },
+    [props.uiScale],
+  )
+
+  /**
+   * Track the pointer during a menu resize.
+   *
+   * Each axis grows towards the drag, which needs the sign of both deltas to follow
+   * the edge the menu is anchored by rather than the corner the grip sits on. A menu
+   * unfolding leftwards has its right edge pinned to the ball, so it widens as the
+   * pointer moves left. A menu hanging below the ball has its top edge pinned, so it
+   * deepens as the pointer moves down, while one rising above the ball has its bottom
+   * edge pinned and deepens as the pointer moves up.
+   *
+   * @param side - the direction the menu unfolded towards.
+   * @param below - whether the menu hangs below the ball rather than rising above it.
+   * @returns the pointermove handler for the grip on that corner.
+   */
+  const onMenuResizeMove = useCallback(
+    (side: 'left' | 'right', below: boolean) =>
+      (event: React.PointerEvent<HTMLDivElement>): void => {
+        const start = menuResizeRef.current
+        if (!start) return
+        // The pointer moves in CSS pixels while the box is a logical size that `ds`
+        // scales, so the displacement is divided by the zoom before it is added. Without
+        // that, a drag at 150% would move the menu half as far as the pointer.
+        const zoom = props.uiScale / 100
+        const deltaX = (side === 'left' ? start.x - event.clientX : event.clientX - start.x) / zoom
+        const deltaY = (below ? event.clientY - start.y : start.y - event.clientY) / zoom
+        setMenuResizing({
+          width: clampLength(start.width + deltaX, start.width, MIN_MENU_WIDTH, MAX_MENU_WIDTH),
+          height: clampLength(start.height + deltaY, start.height, MIN_MENU_HEIGHT, MAX_MENU_HEIGHT),
+        })
+      },
+    [props.uiScale],
+  )
+
+  /** Commit the width and height a resize gesture reached. */
+  const onMenuResizeUp = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>): void => {
+      if (!menuResizeRef.current) return
+      menuResizeRef.current = null
+      event.currentTarget.releasePointerCapture?.(event.pointerId)
+      const size = menuResizing
+      setMenuResizing(null)
+      if (size !== null) props.onMenuResize(size)
+    },
+    [menuResizing, props],
+  )
 
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     // The press starts a drag; whether it is also a click is decided on release.
@@ -314,14 +596,25 @@ export function FloatingBall(props: BallProps) {
    * The clamping is what makes this safe on a small screen: when neither side has
    * room for the panel, it is pinned inside the safe area instead of overflowing.
    */
-  // The preferred width scales with the zoom, so a room named in text the reader
+  // The preferred size scales with the zoom, so a room named in text the reader
   // enlarged is not cut off at a width sized for the default one. The safe area and
   // the viewport still win, which is what keeps a 300% menu inside a small screen.
-  const menuWidth = Math.min(ds(MENU_WIDTH), viewport.w - SAFE * 2)
-  // Clamp to the safe area on BOTH sides: a ball parked at the very edge would
-  // otherwise open a menu that starts off screen.
-  const desired = side === 'left' ? anchor.x + size - menuWidth : anchor.x
-  const menuLeft = Math.max(SAFE, Math.min(viewport.w - SAFE - menuWidth, desired))
+  // A size the user dragged replaces the preferred one, and is scaled the same way
+  // so a zoom change keeps the proportions the reader chose.
+  const preferred = props.menuBox ?? DEFAULT_MENU_BOX
+  const wantedWidth = ds(preferred.width)
+  const wantedHeight = Math.min(ds(preferred.height), ds(MAX_MENU_HEIGHT))
+  // A running gesture supplies the width, so the free edge below tracks the pointer
+  // instead of trailing the last stored value.
+  const freeWidth = menuResizing !== null ? menuResizing.width : wantedWidth
+  // The menu is anchored on the ball's side and grows the other way, and the edge
+  // that grows is the one that must stay inside the safe area. Resolving that edge
+  // first and deriving the width back from it is what keeps a drag honest: clamping
+  // the width alone would park the edge at the safe area and let the menu keep
+  // widening past it, which reads as the edge coming loose from the pointer.
+  const widest = viewport.w - SAFE * 2
+  const menuLeft = side === 'left' ? Math.max(SAFE, anchor.x + size - freeWidth) : Math.max(SAFE, Math.min(anchor.x, viewport.w - SAFE - freeWidth))
+  const menuWidth = Math.min(freeWidth, Math.min(widest, viewport.w - SAFE - menuLeft))
 
   // Same idea vertically: the menu never sits on top of the ball, it hangs below
   // a ball in the upper half and rises above one in the lower half. Anchoring the
@@ -335,9 +628,29 @@ export function FloatingBall(props: BallProps) {
   const menuMaxHeight = below
     ? Math.max(ds(120), viewport.h - SAFE - (anchor.y + size + ds(8)))
     : Math.max(ds(120), anchor.y - ds(8) - SAFE)
-  // The height cap scales with the zoom too, so a zoomed menu scrolls inside the
-  // same footprint instead of being cut off at a height sized for the default one.
-  const menuHeightCap = Math.min(menuMaxHeight, ds(520))
+  /**
+   * The height to pin the menu at, or null to let its content decide.
+   *
+   * An untouched menu sizes itself to the rooms it holds, so it opens short when a
+   * profile has one room instead of leaving a tall empty panel. Only a height the
+   * reader dragged is a real height, and only then is pinning it the right reading of
+   * the gesture.
+   */
+  const pinnedHeight = menuResizing !== null ? menuResizing.height : props.menuBox === null ? null : wantedHeight
+  // An untouched menu may grow to the comfortable default before it scrolls; a pinned
+  // one may grow as far as the viewport allows, because that height is a size the
+  // reader chose. Folding a stored height into the cap as well would hold a gesture at
+  // the size it had when the press began, so the pointer would outrun the menu and it
+  // would only catch up on release.
+  const menuHeightCap =
+    pinnedHeight === null ? Math.min(menuMaxHeight, ds(DEFAULT_MENU_HEIGHT)) : Math.min(menuMaxHeight, pinnedHeight)
+
+  /** The size the menu currently occupies, which a resize gesture starts from. */
+  const menuBox: MenuBox = menuResizing ?? {
+    width: Math.round(menuWidth),
+    height: Math.round(pinnedHeight ?? menuHeightCap),
+  }
+  menuBoxRef.current = menuBox
 
   return (
     <div
@@ -352,14 +665,25 @@ export function FloatingBall(props: BallProps) {
         pointerEvents: 'none',
       }}
     >
-      {props.open && !dragging ? (
+      {props.open ? (
         <div
+          ref={menuRef}
           style={{
             position: 'fixed',
             left: menuLeft,
             ...menuVertical,
-            pointerEvents: 'auto',
-            width: menuWidth,
+            // The menu stays open while the ball is dragged so it travels with the
+            // pointer instead of vanishing and reappearing somewhere else. Clicks are
+            // switched off for the duration: the press belongs to the drag, and a
+            // menu that kept taking clicks would swallow the gesture.
+            pointerEvents: dragging ? 'none' : 'auto',
+            width: menuBox.width,
+            // A dragged height is a size rather than a ceiling, so it is pinned: the
+            // reader grew the menu to hold more rooms, and one that shrank back to its
+            // content the moment a room was removed would undo that choice. Until a
+            // gesture happens there is no such choice to honour, so the menu keeps
+            // sizing itself to its content and only the cap applies.
+            ...(pinnedHeight === null ? {} : { height: Math.round(pinnedHeight) }),
             maxHeight: Math.round(menuHeightCap),
             display: 'flex',
             flexDirection: 'column',
@@ -383,7 +707,10 @@ export function FloatingBall(props: BallProps) {
             {t('rooms')}
           </div>
 
-          <div style={{ overflowY: 'auto', padding: `${ds(4)}px 0` }}>
+          {/* The room list is the only part that gives up height when the menu is short,
+              so the input row and the buttons below it stay reachable. `minHeight: 0`
+              is what lets a flex child shrink below its content and scroll. */}
+          <div style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: `${ds(4)}px 0` }}>
             {props.configuredRoom !== '' ? (
               <div
                 style={{
@@ -586,11 +913,20 @@ export function FloatingBall(props: BallProps) {
                     >
                       {entry.label || `#${entry.room}`}
                     </button>
+                    <IconButton
+                      label={t('forgetRoom')}
+                      scale={ds}
+                      onClick={() => props.onForgetRoom(entry.room)}
+                    >
+                      <CloseIcon />
+                    </IconButton>
                   </div>
                 ))}
               </>
             ) : null}
           </div>
+
+          <CredentialRow credential={props.credential} ds={ds} t={props.t} />
 
           <div
             style={{
@@ -601,8 +937,7 @@ export function FloatingBall(props: BallProps) {
             }}
           >
             <input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
+              value={draft}              onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key !== 'Enter') return
                 props.onAddRoom(draft.trim())
@@ -656,6 +991,32 @@ export function FloatingBall(props: BallProps) {
               <TextButton label={t('ungroupAll')} onClick={props.onHideAll} scale={ds} />
             </div>
           ) : null}
+
+          {/*
+            The grip sits on the corner that moves, which is the corner facing away
+            from the ball: a menu unfolding leftwards has its free edge on the left,
+            and one hanging below the ball has its free edge at the bottom. One grip
+            is drawn rather than four, because the other corners are pinned against
+            the ball and the viewport and could only shrink the menu.
+          */}
+          <div
+            onPointerDown={onMenuResizeDown(side)}
+            onPointerMove={onMenuResizeMove(side, below)}
+            onPointerUp={onMenuResizeUp}
+            onPointerCancel={onMenuResizeUp}
+            title={t('resizeHint')}
+            style={{
+              position: 'absolute',
+              ...(below ? { bottom: 0 } : { top: 0 }),
+              ...(side === 'left' ? { left: 0 } : { right: 0 }),
+              width: ds(14),
+              height: ds(14),
+              // The cursor names the direction the free corner travels in.
+              cursor: GRIP_CURSOR[`${below ? 'below' : 'above'}-${side}`],
+              touchAction: 'none',
+              background: GRIP_STROKES[`${below ? 'below' : 'above'}-${side}`],
+            }}
+          />
         </div>
       ) : null}
 

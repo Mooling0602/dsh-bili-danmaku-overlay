@@ -53,6 +53,7 @@ function readLimits(config) {
 }
 
 // src/credentials.ts
+var CHECK_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var BiliError = class extends Error {
   /** Bilibili's numeric code, or a short string tag for local failures. */
   code;
@@ -124,18 +125,10 @@ function buildCookie() {
   const value = csrfRef.startsWith("bili_jct=") ? csrfRef.slice("bili_jct=".length) : csrfRef;
   return `${base}; bili_jct=${value}`;
 }
-function credentialStatus() {
+async function credentialStatus(timeoutMs = 0) {
+  let cookie;
   try {
-    const cookie = buildCookie();
-    const hasSess = cookieValue(cookie, "SESSDATA") !== "";
-    const hasCsrf = cookieValue(cookie, "bili_jct") !== "";
-    return {
-      ok: true,
-      configured: hasSess,
-      hasSessdata: hasSess,
-      hasCsrf,
-      csrfRef: CSRF_REF
-    };
+    cookie = buildCookie();
   } catch (error) {
     return {
       ok: true,
@@ -143,9 +136,203 @@ function credentialStatus() {
       hasSessdata: false,
       hasCsrf: false,
       csrfRef: CSRF_REF,
+      valid: "no",
       error: error instanceof Error && error.message !== "" ? error.message : "未配置登录凭据"
     };
   }
+  const hasSess = cookieValue(cookie, "SESSDATA") !== "";
+  const hasCsrf = cookieValue(cookie, "bili_jct") !== "";
+  const base = {
+    ok: true,
+    configured: hasSess,
+    hasSessdata: hasSess,
+    hasCsrf,
+    csrfRef: CSRF_REF,
+    valid: "unknown"
+  };
+  if (!hasSess || timeoutMs <= 0) return base;
+  const session = await checkSession(cookie, timeoutMs);
+  return { ...base, ...session };
+}
+async function checkSession(cookie, timeoutMs) {
+  try {
+    const response = await fetch("https://api.bilibili.com/x/web-interface/nav", {
+      headers: {
+        "User-Agent": CHECK_UA,
+        Referer: "https://www.bilibili.com/",
+        Cookie: cookie
+      },
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    const payload = await response.json().catch(() => null);
+    if (!payload) return { valid: "unknown" };
+    if (payload.code === 0 && payload.data?.isLogin === true) {
+      const uname = String(payload.data.uname ?? "").trim();
+      return uname === "" ? { valid: "yes" } : { valid: "yes", uname };
+    }
+    if (payload.code === -101) {
+      return { valid: "no", reason: "登录态已过期，请更新凭据中的 session token" };
+    }
+    return { valid: "unknown" };
+  } catch {
+    return { valid: "unknown" };
+  }
+}
+
+// src/comet.ts
+import { inflateSync } from "node:zlib";
+var OP_HEARTBEAT = 2;
+var OP_MESSAGE = 5;
+var OP_AUTH = 7;
+var OP_AUTH_REPLY = 8;
+var AUTH_REPLY_CMD = "__auth_reply__";
+var VERSION_ZLIB = 2;
+var MAX_DEPTH = 4;
+var fallbackCounter = 0;
+function encodePacket(operation, payload) {
+  const body = Buffer.from(payload, "utf8");
+  const header = Buffer.alloc(16);
+  header.writeUInt32BE(16 + body.length, 0);
+  header.writeUInt16BE(16, 4);
+  header.writeUInt16BE(1, 6);
+  header.writeUInt32BE(operation, 8);
+  header.writeUInt32BE(1, 12);
+  return Buffer.concat([header, body]);
+}
+function authPacket(roomId, token, uid) {
+  return encodePacket(
+    OP_AUTH,
+    JSON.stringify({
+      uid,
+      roomid: roomId,
+      protover: 2,
+      platform: "web",
+      type: 2,
+      key: token
+    })
+  );
+}
+function heartbeatPacket() {
+  return encodePacket(OP_HEARTBEAT, "");
+}
+function decompressBody(version, body) {
+  if (version !== VERSION_ZLIB) return null;
+  try {
+    return inflateSync(body);
+  } catch {
+    return null;
+  }
+}
+function decodeFrame(buffer) {
+  const messages = [];
+  const walk = (payload, depth) => {
+    if (depth > MAX_DEPTH || payload.length < 16) return;
+    let offset = 0;
+    while (offset + 16 <= payload.length) {
+      const length = payload.readUInt32BE(offset);
+      if (length < 16 || offset + length > payload.length) break;
+      const headerLength = payload.readUInt16BE(offset + 4);
+      const version = payload.readUInt16BE(offset + 6);
+      const operation = payload.readUInt32BE(offset + 8);
+      const body = payload.subarray(offset + headerLength, offset + length);
+      offset += length;
+      const inflated = decompressBody(version, body);
+      if (inflated) {
+        walk(inflated, depth + 1);
+        continue;
+      }
+      if (version !== 0 && version !== 1) continue;
+      if (operation === OP_MESSAGE) {
+        try {
+          messages.push(JSON.parse(body.toString("utf8")));
+        } catch {
+        }
+        continue;
+      }
+      if (operation === OP_AUTH_REPLY) {
+        let code = 0;
+        try {
+          code = Number(JSON.parse(body.toString("utf8")).code ?? 0);
+        } catch {
+        }
+        messages.push({ cmd: AUTH_REPLY_CMD, authCode: code });
+      }
+    }
+  };
+  walk(buffer, 0);
+  return messages;
+}
+function danmakuId(info, message) {
+  const head = Array.isArray(info) ? info : [];
+  const extraField = head[0]?.[15]?.extra;
+  let extra = null;
+  if (typeof extraField === "string" && extraField !== "") {
+    try {
+      extra = JSON.parse(extraField);
+    } catch {
+      extra = null;
+    }
+  }
+  const candidates = [extra?.id_str, message.msg_id];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate !== "") return candidate;
+  }
+  const millis = Number(head[4]);
+  const base = Number.isFinite(millis) && millis > 0 ? String(millis) : String(Date.now());
+  return `${base}-${fallbackCounter++}`;
+}
+function toDanmaku(message, options) {
+  const command = String(message.cmd ?? "");
+  const info = message.info;
+  if (command.startsWith("DANMU_MSG") && Array.isArray(info)) {
+    const text = String(info[1] ?? "").trim();
+    if (text === "") return null;
+    const user = Array.isArray(info[2]) ? info[2] : [];
+    const medalInfo = Array.isArray(info[3]) ? info[3] : [];
+    const head = Array.isArray(info[0]) ? info[0] : [];
+    return {
+      kind: "danmaku",
+      id: danmakuId(info, message),
+      text,
+      user: String(user[1] ?? ""),
+      color: Number(head[3] ?? 16777215) || 16777215,
+      admin: Boolean(user[2]),
+      medal: medalInfo.length > 0 ? { name: String(medalInfo[1] ?? ""), level: Number(medalInfo[0] ?? 0) } : null,
+      guard: Number(info[7] ?? 0)
+    };
+  }
+  if (command === "SUPER_CHAT_MESSAGE" && options.showSuperChat) {
+    const data = message.data ?? {};
+    const text = String(data.message ?? "").trim();
+    if (text === "") return null;
+    return {
+      kind: "superchat",
+      id: String(data.id ?? `${Date.now()}-${fallbackCounter++}`),
+      text,
+      user: String(data.user_info?.uname ?? ""),
+      price: Number(data.price ?? 0),
+      color: 16777215,
+      admin: false,
+      medal: null,
+      guard: 0
+    };
+  }
+  if (command === "INTERACT_WORD" && options.showEnterMessages) {
+    const data = message.data ?? {};
+    const user = String(data.uname ?? "");
+    if (user === "") return null;
+    return {
+      kind: "enter",
+      id: `enter-${Date.now()}-${fallbackCounter++}`,
+      text: "进入了直播间",
+      user,
+      color: 16777215,
+      admin: false,
+      medal: null,
+      guard: 0
+    };
+  }
+  return null;
 }
 
 // src/bili.ts
@@ -409,162 +596,6 @@ function normalizeRoomInput(input) {
   return Number.isInteger(roomId) && roomId > 0 ? roomId : null;
 }
 
-// src/comet.ts
-import { inflateSync } from "node:zlib";
-var OP_HEARTBEAT = 2;
-var OP_MESSAGE = 5;
-var OP_AUTH = 7;
-var OP_AUTH_REPLY = 8;
-var AUTH_REPLY_CMD = "__auth_reply__";
-var VERSION_ZLIB = 2;
-var MAX_DEPTH = 4;
-var fallbackCounter = 0;
-function encodePacket(operation, payload) {
-  const body = Buffer.from(payload, "utf8");
-  const header = Buffer.alloc(16);
-  header.writeUInt32BE(16 + body.length, 0);
-  header.writeUInt16BE(16, 4);
-  header.writeUInt16BE(1, 6);
-  header.writeUInt32BE(operation, 8);
-  header.writeUInt32BE(1, 12);
-  return Buffer.concat([header, body]);
-}
-function authPacket(roomId, token, uid) {
-  return encodePacket(
-    OP_AUTH,
-    JSON.stringify({
-      uid,
-      roomid: roomId,
-      protover: 2,
-      platform: "web",
-      type: 2,
-      key: token
-    })
-  );
-}
-function heartbeatPacket() {
-  return encodePacket(OP_HEARTBEAT, "");
-}
-function decompressBody(version, body) {
-  if (version !== VERSION_ZLIB) return null;
-  try {
-    return inflateSync(body);
-  } catch {
-    return null;
-  }
-}
-function decodeFrame(buffer) {
-  const messages = [];
-  const walk = (payload, depth) => {
-    if (depth > MAX_DEPTH || payload.length < 16) return;
-    let offset = 0;
-    while (offset + 16 <= payload.length) {
-      const length = payload.readUInt32BE(offset);
-      if (length < 16 || offset + length > payload.length) break;
-      const headerLength = payload.readUInt16BE(offset + 4);
-      const version = payload.readUInt16BE(offset + 6);
-      const operation = payload.readUInt32BE(offset + 8);
-      const body = payload.subarray(offset + headerLength, offset + length);
-      offset += length;
-      const inflated = decompressBody(version, body);
-      if (inflated) {
-        walk(inflated, depth + 1);
-        continue;
-      }
-      if (version !== 0 && version !== 1) continue;
-      if (operation === OP_MESSAGE) {
-        try {
-          messages.push(JSON.parse(body.toString("utf8")));
-        } catch {
-        }
-        continue;
-      }
-      if (operation === OP_AUTH_REPLY) {
-        let code = 0;
-        try {
-          code = Number(JSON.parse(body.toString("utf8")).code ?? 0);
-        } catch {
-        }
-        messages.push({ cmd: AUTH_REPLY_CMD, authCode: code });
-      }
-    }
-  };
-  walk(buffer, 0);
-  return messages;
-}
-function danmakuId(info, message) {
-  const head = Array.isArray(info) ? info : [];
-  const extraField = head[0]?.[15]?.extra;
-  let extra = null;
-  if (typeof extraField === "string" && extraField !== "") {
-    try {
-      extra = JSON.parse(extraField);
-    } catch {
-      extra = null;
-    }
-  }
-  const candidates = [extra?.id_str, message.msg_id];
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate !== "") return candidate;
-  }
-  const millis = Number(head[4]);
-  const base = Number.isFinite(millis) && millis > 0 ? String(millis) : String(Date.now());
-  return `${base}-${fallbackCounter++}`;
-}
-function toDanmaku(message, options) {
-  const command = String(message.cmd ?? "");
-  const info = message.info;
-  if (command.startsWith("DANMU_MSG") && Array.isArray(info)) {
-    const text = String(info[1] ?? "").trim();
-    if (text === "") return null;
-    const user = Array.isArray(info[2]) ? info[2] : [];
-    const medalInfo = Array.isArray(info[3]) ? info[3] : [];
-    const head = Array.isArray(info[0]) ? info[0] : [];
-    return {
-      kind: "danmaku",
-      id: danmakuId(info, message),
-      text,
-      user: String(user[1] ?? ""),
-      color: Number(head[3] ?? 16777215) || 16777215,
-      admin: Boolean(user[2]),
-      medal: medalInfo.length > 0 ? { name: String(medalInfo[1] ?? ""), level: Number(medalInfo[0] ?? 0) } : null,
-      guard: Number(info[7] ?? 0)
-    };
-  }
-  if (command === "SUPER_CHAT_MESSAGE" && options.showSuperChat) {
-    const data = message.data ?? {};
-    const text = String(data.message ?? "").trim();
-    if (text === "") return null;
-    return {
-      kind: "superchat",
-      id: String(data.id ?? `${Date.now()}-${fallbackCounter++}`),
-      text,
-      user: String(data.user_info?.uname ?? ""),
-      price: Number(data.price ?? 0),
-      color: 16777215,
-      admin: false,
-      medal: null,
-      guard: 0
-    };
-  }
-  if (command === "INTERACT_WORD" && options.showEnterMessages) {
-    const data = message.data ?? {};
-    const user = String(data.uname ?? "");
-    if (user === "") return null;
-    return {
-      kind: "enter",
-      id: `enter-${Date.now()}-${fallbackCounter++}`,
-      text: "进入了直播间",
-      user,
-      color: 16777215,
-      admin: false,
-      medal: null,
-      guard: 0
-    };
-  }
-  return null;
-}
-
 // src/stream.ts
 function authError(code) {
   if (code === -101) return "登录态无效，无法连接弹幕服务器（-101）";
@@ -573,6 +604,22 @@ function authError(code) {
   if (code === -403) return "该直播间拒绝当前账号连接（-403）";
   if (code === -404) return "直播间不存在或已关闭（-404）";
   return `弹幕服务器拒绝了握手（${code}）`;
+}
+var MAX_TRACKED_STREAMS = 32;
+var streams = /* @__PURE__ */ new Map();
+function describeSockets() {
+  return [...streams.values()].map((stream) => ({ ...stream }));
+}
+function resetTransportStats() {
+  let count = 0;
+  for (const stream of streams.values()) {
+    stream.messages = 0;
+    stream.items = 0;
+    stream.reconnects = 0;
+    stream.lastMessageAt = 0;
+    count += 1;
+  }
+  return count;
 }
 function streamDanmaku(response, options) {
   const { roomId } = options;
@@ -592,7 +639,27 @@ function streamDanmaku(response, options) {
   let authenticated = false;
   let hostIndex = 0;
   let liveStatus = null;
+  const tracked = {
+    roomId,
+    startedAt: Date.now(),
+    state: "connecting",
+    authenticated: false,
+    messages: 0,
+    items: 0,
+    reconnects: 0,
+    lastStatus: "",
+    lastMessageAt: 0
+  };
+  if (streams.size >= MAX_TRACKED_STREAMS) {
+    const oldest = [...streams.entries()].sort((left, right) => left[1].startedAt - right[1].startedAt)[0];
+    if (oldest) streams.delete(oldest[0]);
+  }
+  streams.set(roomId, tracked);
   const send = (event, data) => {
+    if (event === "status") {
+      const record = data;
+      tracked.lastStatus = record.message ?? record.state ?? "";
+    }
     if (closed || response.writableEnded) return;
     try {
       response.write(`event: ${event}
@@ -606,6 +673,8 @@ data: ${JSON.stringify(data)}
   const stop = () => {
     if (closed) return;
     closed = true;
+    tracked.state = "closed";
+    if (streams.get(roomId) === tracked) streams.delete(roomId);
     if (heartbeat) clearInterval(heartbeat);
     if (keepalive) clearInterval(keepalive);
     if (retryTimer) clearTimeout(retryTimer);
@@ -642,6 +711,7 @@ data: ${JSON.stringify(data)}
         send("room", { roomId: resolved.roomId, liveStatus: resolved.liveStatus });
       }
       if (liveStatus !== 1) {
+        tracked.state = "offline";
         send("status", { state: "offline" });
         return;
       }
@@ -652,11 +722,14 @@ data: ${JSON.stringify(data)}
       upstream = socket;
       socket.binaryType = "arraybuffer";
       authenticated = false;
+      tracked.state = "connecting";
+      tracked.authenticated = false;
       socket.addEventListener("open", () => {
         if (closed) {
           socket.close();
           return;
         }
+        tracked.state = "open";
         socket.send(new Uint8Array(authPacket(roomId, info.token, info.uid)));
         heartbeat = setInterval(() => {
           if (socket.readyState === 1) socket.send(new Uint8Array(heartbeatPacket()));
@@ -668,10 +741,13 @@ data: ${JSON.stringify(data)}
         const buffer = data instanceof ArrayBuffer ? Buffer.from(new Uint8Array(data)) : Buffer.from(String(data), "utf8");
         const decoded = decodeFrame(buffer);
         if (decoded.length === 0) return;
+        tracked.messages += decoded.length;
+        tracked.lastMessageAt = Date.now();
         const refusal = decoded.find(
           (message) => message.cmd === AUTH_REPLY_CMD && (message.authCode ?? 0) !== 0
         );
         if (refusal) {
+          tracked.state = "error";
           send("status", {
             state: "error",
             message: authError(refusal.authCode ?? 0)
@@ -680,6 +756,7 @@ data: ${JSON.stringify(data)}
         }
         if (!authenticated) {
           authenticated = true;
+          tracked.authenticated = true;
           attempt = 0;
           send("status", { state: "live" });
         }
@@ -689,7 +766,10 @@ data: ${JSON.stringify(data)}
             showEnterMessages: options.showEnterMessages,
             showSuperChat: options.showSuperChat
           });
-          if (item) send("danmaku", item);
+          if (item) {
+            tracked.items += 1;
+            send("danmaku", item);
+          }
         }
       });
       socket.addEventListener("close", () => {
@@ -697,7 +777,12 @@ data: ${JSON.stringify(data)}
           clearInterval(heartbeat);
           heartbeat = null;
         }
-        if (!closed) scheduleRetry();
+        tracked.authenticated = false;
+        if (!closed) {
+          tracked.state = "closed";
+          tracked.reconnects += 1;
+          scheduleRetry();
+        }
       });
       socket.addEventListener("error", () => {
         try {
@@ -735,10 +820,12 @@ async function fetchHistory(roomId, fetchCount, timeoutMs = 12e3) {
   }
   const payload = await response.json().catch(() => null);
   if (!payload) throw new BiliError("历史弹幕返回了无法解析的响应");
-  const merged = [
-    ...Array.isArray(payload.data?.admin) ? payload.data.admin : [],
-    ...Array.isArray(payload.data?.room) ? payload.data.room : []
-  ];
+  const admin = Array.isArray(payload.data?.admin) ? payload.data.admin : [];
+  const room = Array.isArray(payload.data?.room) ? payload.data.room : [];
+  const merged = [...admin, ...room];
+  if (payload.code === 0 && merged.length === 0) {
+    throw new BiliError("历史弹幕为空：登录态可能已失效或被风控降级", -352);
+  }
   const items = [];
   const timelineOf = /* @__PURE__ */ new Map();
   const seen = /* @__PURE__ */ new Set();
@@ -866,6 +953,140 @@ function readHistory(roomId) {
     error: loop.error
   };
 }
+function readRoomLoops() {
+  const rows = [];
+  for (const [roomId, loop] of loops) {
+    rows.push({
+      roomId,
+      intervalMs: loop.intervalMs,
+      streak: loop.streak,
+      items: loop.items.length,
+      ageMs: loop.fetchedAt === 0 ? 0 : Date.now() - loop.fetchedAt,
+      error: loop.error,
+      polling: loop.timer !== null
+    });
+  }
+  return rows;
+}
+
+// src/debug.ts
+function diagnose(transports, rooms) {
+  if (transports.length === 0 && rooms.length === 0) {
+    return "No room is streaming or polling. The page has not opened a room since the Host started, or every window is closed.";
+  }
+  for (const stream of transports) {
+    if (stream.state === "offline") return `Room ${stream.roomId} reports itself not live, so no danmaku will arrive until the stream starts.`;
+    if (stream.lastStatus !== "" && stream.state === "error") return `Room ${stream.roomId} failed with: ${stream.lastStatus}`;
+    if (stream.state === "connecting" && stream.ageMs > 15e3 && !stream.authenticated) {
+      return `Room ${stream.roomId} has been connecting for ${Math.round(stream.ageMs / 1e3)}s without a handshake reply, which points at the comet host rather than at the token.`;
+    }
+    if (stream.state === "open" && !stream.authenticated) {
+      return `Room ${stream.roomId} has an open socket but no handshake reply, so it is connected to a comet host that is not accepting the session.`;
+    }
+    if (stream.authenticated && stream.messages === 0) {
+      return `Room ${stream.roomId} authenticated but has received no message at all, so the socket is idle rather than the room being quiet.`;
+    }
+    if (stream.authenticated && stream.lastMessageAgeMs !== null && stream.lastMessageAgeMs > 12e4) {
+      return `Room ${stream.roomId} is authenticated but silent for ${Math.round(stream.lastMessageAgeMs / 1e3)}s, so the socket has most likely been dropped by a middlebox.`;
+    }
+  }
+  for (const room of rooms) {
+    if (room.error !== "") return `Room ${room.roomId} history reads are failing: ${room.error}`;
+    if (room.intervalMs >= 3e4) return `Room ${room.roomId} history has backed off to the 30s ceiling, which means reads are being throttled or failing.`;
+    if (room.ageMs > Math.max(1e4, room.intervalMs * 3)) {
+      return `Room ${room.roomId} history is stale by ${Math.round(room.ageMs / 1e3)}s against a ${room.intervalMs}ms interval, so the poll loop is not keeping up.`;
+    }
+    if (!room.polling && room.ageMs > 5e3) return `Room ${room.roomId} has stopped polling, so nothing will refresh until the page asks again.`;
+  }
+  return "Every transport is attached and every poll loop is current, so nothing in the Host is stalled.";
+}
+function buildReport(reset) {
+  const now = Date.now();
+  const streams2 = describeSockets();
+  const transports = streams2.map((stream) => ({
+    roomId: stream.roomId,
+    state: stream.state,
+    authenticated: stream.authenticated,
+    messages: stream.messages,
+    items: stream.items,
+    reconnects: stream.reconnects,
+    lastMessageAgeMs: stream.lastMessageAt === 0 ? null : now - stream.lastMessageAt,
+    ageMs: now - stream.startedAt,
+    lastStatus: stream.lastStatus
+  }));
+  const rooms = readRoomLoops().map((room) => ({
+    roomId: room.roomId,
+    intervalMs: room.intervalMs,
+    streak: room.streak,
+    items: room.items,
+    ageMs: room.ageMs,
+    polling: room.polling,
+    error: room.error
+  }));
+  const report = { now, transports, rooms, diagnosis: diagnose(transports, rooms) };
+  if (reset) resetTransportStats();
+  return report;
+}
+function format(value) {
+  const report = value;
+  if (!report || typeof report !== "object") return "No status was produced.";
+  const lines = [`Diagnosis: ${report.diagnosis}`, ""];
+  if (report.transports.length === 0) {
+    lines.push("Transports: none");
+  } else {
+    lines.push(`Transports (${report.transports.length}):`);
+    for (const stream of report.transports) {
+      const age = stream.lastMessageAgeMs === null ? "never" : `${Math.round(stream.lastMessageAgeMs / 1e3)}s ago`;
+      lines.push(
+        `- room ${stream.roomId}: ${stream.state}, authenticated=${String(stream.authenticated)}, messages=${stream.messages}, items=${stream.items}, reconnects=${stream.reconnects}, last message ${age}, attached ${Math.round(stream.ageMs / 1e3)}s` + (stream.lastStatus === "" ? "" : `, status="${stream.lastStatus}"`)
+      );
+    }
+  }
+  lines.push("");
+  if (report.rooms.length === 0) {
+    lines.push("History loops: none");
+  } else {
+    lines.push(`History loops (${report.rooms.length}):`);
+    for (const room of report.rooms) {
+      lines.push(
+        `- room ${room.roomId}: interval=${room.intervalMs}ms, streak=${room.streak}, items=${room.items}, age=${Math.round(room.ageMs / 1e3)}s, polling=${String(room.polling)}` + (room.error === "" ? "" : `, error="${room.error}"`)
+      );
+    }
+  }
+  return lines.join("\n");
+}
+function statusTool() {
+  return {
+    name: "bili_danmaku_status",
+    description: "Report the live state of the Bilibili danmaku overlay: every upstream transport with its socket state, whether the comet handshake was answered, and its message and reconnect counters, plus every room history loop with its poll interval, backoff streak and staleness. Use it when danmaku appear to stop updating, because it separates a dead socket from a throttled poller from an offline room. Pass reset to clear the counters after reporting, so a second call measures only the interval between the two.",
+    parameters: {
+      type: "object",
+      properties: {
+        reset: {
+          type: "boolean",
+          description: "Clear the per-transport counters after reporting them. Defaults to false."
+        }
+      },
+      additionalProperties: false
+    },
+    output: {
+      schema: { type: "object", additionalProperties: true },
+      render(_args, value) {
+        return [{ type: "text", text: format(value) }];
+      }
+    },
+    execute(args) {
+      const reset = typeof args === "object" && args !== null && args.reset === true;
+      return buildReport(reset);
+    }
+  };
+}
+function registerDebugTools(tools) {
+  const dispose = tools.register(statusTool());
+  return () => {
+    dispose();
+  };
+}
 
 // src/routes.ts
 var ROUTE_PREFIX = "/bili-danmaku-overlay";
@@ -910,7 +1131,8 @@ async function route(request, response, config) {
   const path = url.pathname.slice(ROUTE_PREFIX.length) || "/";
   const limits = readLimits(config);
   if (path === "/api/credential" && request.method === "GET") {
-    sendJson(response, 200, credentialStatus());
+    const status = await credentialStatus(limits.requestTimeoutMs);
+    sendJson(response, 200, status);
     return;
   }
   if (path === "/api/config" && request.method === "GET") {
@@ -989,7 +1211,7 @@ async function route(request, response, config) {
 }
 
 // host.ts
-var inject = ["webServer"];
+var inject = ["webServer", "tools"];
 function apply(ctx, config) {
   ctx.effect(
     () => ctx.webServer.register({
@@ -1021,6 +1243,10 @@ function apply(ctx, config) {
     }),
     "bili-danmaku-overlay: Bilibili danmaku routes"
   );
+  ctx.effect(() => {
+    const dispose = registerDebugTools(ctx.tools);
+    return dispose;
+  }, "bili-danmaku-overlay: debug tools");
 }
 export {
   Config,

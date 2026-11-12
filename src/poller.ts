@@ -251,6 +251,48 @@ export function readHistory(roomId: number): HistorySnapshot {
 }
 
 /**
+ * Describe every room's history loop.
+ *
+ * This is the diagnostic view of the poller: the interval is the number that
+ * silently grows to 30 seconds under a throttle, and a stalled `ageMs` beside a
+ * large interval is the signature of a room whose history stopped moving.
+ *
+ * @returns one row per loop, with its health and backoff state.
+ */
+export function readRoomLoops(): Array<{
+  readonly roomId: number
+  readonly intervalMs: number
+  readonly streak: number
+  readonly items: number
+  readonly ageMs: number
+  readonly error: string
+  readonly polling: boolean
+}> {
+  const rows = []
+  for (const [roomId, loop] of loops) {
+    rows.push({
+      roomId,
+      intervalMs: loop.intervalMs,
+      streak: loop.streak,
+      items: loop.items.length,
+      ageMs: loop.fetchedAt === 0 ? 0 : Date.now() - loop.fetchedAt,
+      error: loop.error,
+      polling: loop.timer !== null,
+    })
+  }
+  return rows
+}
+
+/**
+ * Read one snapshot per loop, for a caller that wants the items too.
+ *
+ * @returns one entry per room, keyed by room id in the `roomId` field.
+ */
+export function readHistorySnapshotList(): Array<{ roomId: number } & HistorySnapshot> {
+  return [...loops.keys()].map((roomId) => ({ roomId, ...readHistory(roomId) }))
+}
+
+/**
  * Stop every loop, for shutdown or a config change.
  */
 export function stopAllPollers(): void {

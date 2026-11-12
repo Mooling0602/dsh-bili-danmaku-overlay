@@ -107,9 +107,21 @@ export interface SavedState {
 /** Credential availability, as reported by the Host. */
 export interface Credential {
   readonly ok: boolean
+  /** Whether the file holds both tokens; says nothing about whether they work. */
   readonly configured: boolean
   readonly hasSessdata?: boolean
   readonly hasCsrf?: boolean
+  /**
+   * Whether Bilibili accepted the stored session.
+   *
+   * A populated credential with an expired session reads `no` here while
+   * `configured` stays true, which is the state worth warning about.
+   */
+  readonly valid?: 'yes' | 'no' | 'unknown'
+  /** Account name, present only when the session was accepted. */
+  readonly uname?: string
+  /** Why the session was rejected. */
+  readonly reason?: string
   readonly error?: string
 }
 

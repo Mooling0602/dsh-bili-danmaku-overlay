@@ -63,6 +63,81 @@ function authError(code: number): string {
   return `弹幕服务器拒绝了握手（${code}）`
 }
 
+/** How many live transports the process is holding at most, so the registry cannot grow without bound. */
+const MAX_TRACKED_STREAMS = 32
+
+/**
+ * One live event stream, described for the debug tool.
+ *
+ * A stream outlives a single request only as long as its socket stays open, so the
+ * registry that holds these is the only place a question about a stalled
+ * connection can be answered.
+ */
+interface TrackedStream {
+  /** Real room id the stream is attached to. */
+  readonly roomId: number
+  /** When the stream started, epoch ms. */
+  readonly startedAt: number
+  /** Current socket state, updated as the socket changes. */
+  state: 'connecting' | 'open' | 'closed' | 'offline' | 'error'
+  /** Whether the server answered the handshake on the current socket. */
+  authenticated: boolean
+  /** Comet messages forwarded to the page. */
+  messages: number
+  /** Danmaku items forwarded to the page. */
+  items: number
+  /** Completed reconnects. */
+  reconnects: number
+  /** Last status text sent to the page, empty when healthy. */
+  lastStatus: string
+  /** When the last message arrived, epoch ms; 0 when none has. */
+  lastMessageAt: number
+}
+
+const streams = new Map<number, TrackedStream>()
+
+/**
+ * Describe every tracked stream.
+ *
+ * @returns one row per live stream, with its socket health and counters.
+ */
+export function describeSockets(): TrackedStream[] {
+  return [...streams.values()].map((stream) => ({ ...stream }))
+}
+
+/**
+ * Read the counters for one room's stream.
+ *
+ * @param roomId - real room id.
+ * @returns the counters, or undefined when that room has no stream.
+ */
+export function readTransportStats(roomId: number): TrackedStream | undefined {
+  const stream = streams.get(roomId)
+  return stream ? { ...stream } : undefined
+}
+
+/**
+ * Clear the counters on every tracked stream.
+ *
+ * The socket state and the room id survive, because they describe the connection
+ * rather than the measurement window. Everything that accumulates is zeroed, so a
+ * caller can take a report, reset, wait, and take a second report whose numbers
+ * describe only the interval between the two.
+ *
+ * @returns how many streams were reset.
+ */
+export function resetTransportStats(): number {
+  let count = 0
+  for (const stream of streams.values()) {
+    stream.messages = 0
+    stream.items = 0
+    stream.reconnects = 0
+    stream.lastMessageAt = 0
+    count += 1
+  }
+  return count
+}
+
 /**
  * Stream one room's danmaku to the page as server-sent events.
  *
@@ -101,7 +176,32 @@ export function streamDanmaku(response: EventSink, options: StreamOptions): () =
   let hostIndex = 0
   let liveStatus: number | null = null
 
+  // The tracked record is what the debug tool reads, and it is the same object the
+  // handlers below mutate, so the two cannot disagree about a socket's health.
+  const tracked: TrackedStream = {
+    roomId,
+    startedAt: Date.now(),
+    state: 'connecting',
+    authenticated: false,
+    messages: 0,
+    items: 0,
+    reconnects: 0,
+    lastStatus: '',
+    lastMessageAt: 0,
+  }
+  // A room can only sensibly have one live stream at a time, and an old entry from
+  // a page that already navigated away would otherwise answer for the new one.
+  if (streams.size >= MAX_TRACKED_STREAMS) {
+    const oldest = [...streams.entries()].sort((left, right) => left[1].startedAt - right[1].startedAt)[0]
+    if (oldest) streams.delete(oldest[0])
+  }
+  streams.set(roomId, tracked)
+
   const send = (event: string, data: unknown): void => {
+    if (event === 'status') {
+      const record = data as { state?: string; message?: string }
+      tracked.lastStatus = record.message ?? record.state ?? ''
+    }
     if (closed || response.writableEnded) return
     try {
       response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
@@ -113,6 +213,10 @@ export function streamDanmaku(response: EventSink, options: StreamOptions): () =
   const stop = (): void => {
     if (closed) return
     closed = true
+    tracked.state = 'closed'
+    // Leaving a closed stream in the registry would let a later report describe a
+    // connection that no longer exists.
+    if (streams.get(roomId) === tracked) streams.delete(roomId)
     if (heartbeat) clearInterval(heartbeat)
     if (keepalive) clearInterval(keepalive)
     if (retryTimer) clearTimeout(retryTimer)
@@ -156,6 +260,7 @@ export function streamDanmaku(response: EventSink, options: StreamOptions): () =
         send('room', { roomId: resolved.roomId, liveStatus: resolved.liveStatus })
       }
       if (liveStatus !== 1) {
+        tracked.state = 'offline'
         send('status', { state: 'offline' })
         return
       }
@@ -168,12 +273,15 @@ export function streamDanmaku(response: EventSink, options: StreamOptions): () =
       upstream = socket
       socket.binaryType = 'arraybuffer'
       authenticated = false
+      tracked.state = 'connecting'
+      tracked.authenticated = false
 
       socket.addEventListener('open', () => {
         if (closed) {
           socket.close()
           return
         }
+        tracked.state = 'open'
         socket.send(new Uint8Array(authPacket(roomId, info.token, info.uid)))
         heartbeat = setInterval(() => {
           if (socket.readyState === 1) socket.send(new Uint8Array(heartbeatPacket()))
@@ -190,6 +298,8 @@ export function streamDanmaku(response: EventSink, options: StreamOptions): () =
 
         const decoded = decodeFrame(buffer)
         if (decoded.length === 0) return
+        tracked.messages += decoded.length
+        tracked.lastMessageAt = Date.now()
 
         // A refused handshake is terminal for this attempt: retrying with the
         // same identity and token only burns the throttle that caused it. The
@@ -199,6 +309,7 @@ export function streamDanmaku(response: EventSink, options: StreamOptions): () =
           (message) => message.cmd === AUTH_REPLY_CMD && (message.authCode ?? 0) !== 0,
         )
         if (refusal) {
+          tracked.state = 'error'
           send('status', {
             state: 'error',
             message: authError(refusal.authCode ?? 0),
@@ -213,6 +324,7 @@ export function streamDanmaku(response: EventSink, options: StreamOptions): () =
         // would stay on its connecting state forever.
         if (!authenticated) {
           authenticated = true
+          tracked.authenticated = true
           attempt = 0
           send('status', { state: 'live' })
         }
@@ -223,7 +335,10 @@ export function streamDanmaku(response: EventSink, options: StreamOptions): () =
             showEnterMessages: options.showEnterMessages,
             showSuperChat: options.showSuperChat,
           })
-          if (item) send('danmaku', item)
+          if (item) {
+            tracked.items += 1
+            send('danmaku', item)
+          }
         }
       })
 
@@ -232,7 +347,12 @@ export function streamDanmaku(response: EventSink, options: StreamOptions): () =
           clearInterval(heartbeat)
           heartbeat = null
         }
-        if (!closed) scheduleRetry()
+        tracked.authenticated = false
+        if (!closed) {
+          tracked.state = 'closed'
+          tracked.reconnects += 1
+          scheduleRetry()
+        }
       })
 
       socket.addEventListener('error', () => {
@@ -321,10 +441,20 @@ export async function fetchHistory(
   } | null
   if (!payload) throw new BiliError('历史弹幕返回了无法解析的响应')
 
-  const merged = [
-    ...(Array.isArray(payload.data?.admin) ? payload.data.admin : []),
-    ...(Array.isArray(payload.data?.room) ? payload.data.room : []),
-  ]
+  const admin = Array.isArray(payload.data?.admin) ? payload.data.admin : []
+  const room = Array.isArray(payload.data?.room) ? payload.data.room : []
+  const merged = [...admin, ...room]
+
+  // A rejected session does not fail here: `gethistory` answers `code: 0` with two
+  // empty arrays, which is shaped exactly like a quiet room. Left alone that makes
+  // a dead login look like a healthy one, and the poller keeps a 100ms interval
+  // because every read "succeeds". Measured directly: a room carrying a danmaku a
+  // second returned both arrays empty with and without a cookie, while the same
+  // cookie was refused by `nav` with -101, so an empty pair is a degradation
+  // signal rather than evidence of silence.
+  if (payload.code === 0 && merged.length === 0) {
+    throw new BiliError('历史弹幕为空：登录态可能已失效或被风控降级', -352)
+  }
 
   /** One row of the history payload, as far as this module reads it. */
   interface HistoryRecord {

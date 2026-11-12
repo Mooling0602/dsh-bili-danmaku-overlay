@@ -570,6 +570,106 @@ window.__ModuleLoader__.load({
       var DRAG_SLOP = 4;
       var SAFE = 12;
       var MENU_WIDTH = 268;
+      var MIN_MENU_WIDTH = 220;
+      var MAX_MENU_WIDTH = 460;
+      var MIN_MENU_HEIGHT = 180;
+      var MAX_MENU_HEIGHT = 720;
+      var DEFAULT_MENU_HEIGHT = 520;
+      var DEFAULT_MENU_BOX = { width: MENU_WIDTH, height: DEFAULT_MENU_HEIGHT };
+      var GRIP_CURSOR = {
+        "below-left": "nesw-resize",
+        "below-right": "nwse-resize",
+        "above-left": "nwse-resize",
+        "above-right": "nesw-resize"
+      };
+      function gripStrokes(angle) {
+        const tone = "var(--dsw-alias-label-tertiary, #bbb)";
+        return `linear-gradient(${angle}deg, transparent 45%, ${tone} 45%, ${tone} 55%, transparent 55%), linear-gradient(${angle}deg, transparent 68%, ${tone} 68%, ${tone} 78%, transparent 78%)`;
+      }
+      var GRIP_STROKES = {
+        "below-left": gripStrokes(45),
+        "below-right": gripStrokes(135),
+        "above-left": gripStrokes(135),
+        "above-right": gripStrokes(45)
+      };
+      function CredentialRow({
+        credential,
+        ds,
+        t
+      }) {
+        let label;
+        let tone;
+        let detail = "";
+        if (!credential) {
+          label = t("credential");
+          tone = "var(--dsw-alias-label-tertiary, #999)";
+          detail = t("credentialUnknown");
+        } else if (!credential.configured) {
+          label = t("credential");
+          tone = "var(--dsw-alias-state-error-primary, #ef4444)";
+          detail = credential.error ?? t("credentialMissing");
+        } else if (credential.valid === "no") {
+          label = t("credential");
+          tone = "var(--dsw-alias-state-error-primary, #ef4444)";
+          detail = credential.reason ?? t("credentialExpired");
+        } else if (credential.valid === "yes" && credential.hasCsrf === false) {
+          label = t("credential");
+          tone = "var(--dsw-alias-state-warn-primary, #f59e0b)";
+          detail = credential.uname ? `${credential.uname}: ${t("credentialNoCsrf")}` : t("credentialNoCsrf");
+        } else if (credential.valid === "yes") {
+          label = t("credential");
+          tone = "var(--dsw-alias-state-success-primary, #22c55e)";
+          detail = credential.uname ? `${t("credentialValid")} · ${credential.uname}` : t("credentialValid");
+        } else {
+          label = t("credential");
+          tone = "var(--dsw-alias-label-tertiary, #999)";
+          detail = t("credentialUnknown");
+        }
+        return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+          "div",
+          {
+            style: {
+              display: "flex",
+              alignItems: "center",
+              gap: ds(6),
+              padding: `${ds(7)}px ${ds(11)}px`,
+              borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
+            },
+            title: detail,
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                "span",
+                {
+                  style: {
+                    width: ds(7),
+                    height: ds(7),
+                    borderRadius: 999,
+                    flex: "0 0 auto",
+                    background: tone
+                  }
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { style: { fontSize: ds(11), color: "var(--dsw-alias-label-tertiary, #999)", flex: "0 0 auto" }, children: label }),
+              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                "span",
+                {
+                  style: {
+                    flex: "1 1 auto",
+                    minWidth: 0,
+                    fontSize: ds(11),
+                    color: tone,
+                    textAlign: "right",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap"
+                  },
+                  children: detail
+                }
+              )
+            ]
+          }
+        );
+      }
       function FloatingBall(props) {
         const { t, rooms, size } = props;
         const bs = (value) => Math.max(1, Math.round(value * (size / DEFAULT_BALL_SIZE)));
@@ -599,10 +699,53 @@ window.__ModuleLoader__.load({
         const rootRef = (0, import_react.useRef)(null);
         const dragRef = (0, import_react.useRef)(null);
         const latestRef = (0, import_react.useRef)(null);
+        const [menuResizing, setMenuResizing] = (0, import_react.useState)(null);
+        const menuResizeRef = (0, import_react.useRef)(null);
+        const menuBoxRef = (0, import_react.useRef)(DEFAULT_MENU_BOX);
+        const menuRef = (0, import_react.useRef)(null);
         const unfold = (0, import_react.useCallback)((point) => {
           const centre = point.x + size / 2;
           return centre > viewport.w / 2 ? "left" : "right";
         }, [size, viewport.w]);
+        const onMenuResizeDown = (0, import_react.useCallback)(
+          (side2) => (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            const zoom = props.uiScale / 100;
+            const rect = menuRef.current?.getBoundingClientRect();
+            const current = rect === void 0 ? menuBoxRef.current : { width: Math.round(rect.width / zoom), height: Math.round(rect.height / zoom) };
+            menuResizeRef.current = { width: current.width, height: current.height, x: event.clientX, y: event.clientY };
+            setMenuResizing(current);
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            void side2;
+          },
+          [props.uiScale]
+        );
+        const onMenuResizeMove = (0, import_react.useCallback)(
+          (side2, below2) => (event) => {
+            const start = menuResizeRef.current;
+            if (!start) return;
+            const zoom = props.uiScale / 100;
+            const deltaX = (side2 === "left" ? start.x - event.clientX : event.clientX - start.x) / zoom;
+            const deltaY = (below2 ? event.clientY - start.y : start.y - event.clientY) / zoom;
+            setMenuResizing({
+              width: clampLength(start.width + deltaX, start.width, MIN_MENU_WIDTH, MAX_MENU_WIDTH),
+              height: clampLength(start.height + deltaY, start.height, MIN_MENU_HEIGHT, MAX_MENU_HEIGHT)
+            });
+          },
+          [props.uiScale]
+        );
+        const onMenuResizeUp = (0, import_react.useCallback)(
+          (event) => {
+            if (!menuResizeRef.current) return;
+            menuResizeRef.current = null;
+            event.currentTarget.releasePointerCapture?.(event.pointerId);
+            const size2 = menuResizing;
+            setMenuResizing(null);
+            if (size2 !== null) props.onMenuResize(size2);
+          },
+          [menuResizing, props]
+        );
         const onPointerDown = (0, import_react.useCallback)((event) => {
           event.preventDefault();
           dragRef.current = { x0: event.clientX, y0: event.clientY, moved: false };
@@ -653,13 +796,23 @@ window.__ModuleLoader__.load({
         const anchor = at ?? { x: viewport.w - size - SAFE, y: SAFE };
         const side = unfold(anchor);
         const expanded = !collapse && !dragging;
-        const menuWidth = Math.min(ds(MENU_WIDTH), viewport.w - SAFE * 2);
-        const desired = side === "left" ? anchor.x + size - menuWidth : anchor.x;
-        const menuLeft = Math.max(SAFE, Math.min(viewport.w - SAFE - menuWidth, desired));
+        const preferred = props.menuBox ?? DEFAULT_MENU_BOX;
+        const wantedWidth = ds(preferred.width);
+        const wantedHeight = Math.min(ds(preferred.height), ds(MAX_MENU_HEIGHT));
+        const freeWidth = menuResizing !== null ? menuResizing.width : wantedWidth;
+        const widest = viewport.w - SAFE * 2;
+        const menuLeft = side === "left" ? Math.max(SAFE, anchor.x + size - freeWidth) : Math.max(SAFE, Math.min(anchor.x, viewport.w - SAFE - freeWidth));
+        const menuWidth = Math.min(freeWidth, Math.min(widest, viewport.w - SAFE - menuLeft));
         const below = anchor.y + size / 2 < viewport.h / 2;
         const menuVertical = below ? { top: anchor.y + size + ds(8) } : { bottom: viewport.h - anchor.y + ds(8) };
         const menuMaxHeight = below ? Math.max(ds(120), viewport.h - SAFE - (anchor.y + size + ds(8))) : Math.max(ds(120), anchor.y - ds(8) - SAFE);
-        const menuHeightCap = Math.min(menuMaxHeight, ds(520));
+        const pinnedHeight = menuResizing !== null ? menuResizing.height : props.menuBox === null ? null : wantedHeight;
+        const menuHeightCap = pinnedHeight === null ? Math.min(menuMaxHeight, ds(DEFAULT_MENU_HEIGHT)) : Math.min(menuMaxHeight, pinnedHeight);
+        const menuBox = menuResizing ?? {
+          width: Math.round(menuWidth),
+          height: Math.round(pinnedHeight ?? menuHeightCap)
+        };
+        menuBoxRef.current = menuBox;
         return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
           "div",
           {
@@ -674,15 +827,26 @@ window.__ModuleLoader__.load({
               pointerEvents: "none"
             },
             children: [
-              props.open && !dragging ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+              props.open ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
                 "div",
                 {
+                  ref: menuRef,
                   style: {
                     position: "fixed",
                     left: menuLeft,
                     ...menuVertical,
-                    pointerEvents: "auto",
-                    width: menuWidth,
+                    // The menu stays open while the ball is dragged so it travels with the
+                    // pointer instead of vanishing and reappearing somewhere else. Clicks are
+                    // switched off for the duration: the press belongs to the drag, and a
+                    // menu that kept taking clicks would swallow the gesture.
+                    pointerEvents: dragging ? "none" : "auto",
+                    width: menuBox.width,
+                    // A dragged height is a size rather than a ceiling, so it is pinned: the
+                    // reader grew the menu to hold more rooms, and one that shrank back to its
+                    // content the moment a room was removed would undo that choice. Until a
+                    // gesture happens there is no such choice to honour, so the menu keeps
+                    // sizing itself to its content and only the cap applies.
+                    ...pinnedHeight === null ? {} : { height: Math.round(pinnedHeight) },
                     maxHeight: Math.round(menuHeightCap),
                     display: "flex",
                     flexDirection: "column",
@@ -707,7 +871,7 @@ window.__ModuleLoader__.load({
                         children: t("rooms")
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { overflowY: "auto", padding: `${ds(4)}px 0` }, children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: `${ds(4)}px 0` }, children: [
                       props.configuredRoom !== "" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
                         "div",
                         {
@@ -934,6 +1098,15 @@ window.__ModuleLoader__.load({
                                   },
                                   children: entry.label || `#${entry.room}`
                                 }
+                              ),
+                              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                                IconButton,
+                                {
+                                  label: t("forgetRoom"),
+                                  scale: ds,
+                                  onClick: () => props.onForgetRoom(entry.room),
+                                  children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {})
+                                }
                               )
                             ]
                           },
@@ -941,6 +1114,7 @@ window.__ModuleLoader__.load({
                         ))
                       ] }) : null
                     ] }),
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CredentialRow, { credential: props.credential, ds, t: props.t }),
                     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
                       "div",
                       {
@@ -1014,7 +1188,28 @@ window.__ModuleLoader__.load({
                           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { label: t("ungroupAll"), onClick: props.onHideAll, scale: ds })
                         ]
                       }
-                    ) : null
+                    ) : null,
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                      "div",
+                      {
+                        onPointerDown: onMenuResizeDown(side),
+                        onPointerMove: onMenuResizeMove(side, below),
+                        onPointerUp: onMenuResizeUp,
+                        onPointerCancel: onMenuResizeUp,
+                        title: t("resizeHint"),
+                        style: {
+                          position: "absolute",
+                          ...below ? { bottom: 0 } : { top: 0 },
+                          ...side === "left" ? { left: 0 } : { right: 0 },
+                          width: ds(14),
+                          height: ds(14),
+                          // The cursor names the direction the free corner travels in.
+                          cursor: GRIP_CURSOR[`${below ? "below" : "above"}-${side}`],
+                          touchAction: "none",
+                          background: GRIP_STROKES[`${below ? "below" : "above"}-${side}`]
+                        }
+                      }
+                    )
                   ]
                 }
               ) : null,
@@ -1647,6 +1842,12 @@ window.__ModuleLoader__.load({
         sent: "已发送",
         noCredential: "未配置登录凭据，无法发言",
         credentialHint: "凭据缺少 bili_jct，无法发言",
+        credential: "登录凭据",
+        credentialMissing: "未配置",
+        credentialExpired: "已失效，请更新",
+        credentialValid: "有效",
+        credentialUnknown: "无法验证",
+        credentialNoCsrf: "缺少发言令牌",
         hostNotReady: "插件后端未就绪，请重启 dsh 服务",
         sendFailed: "发送失败",
         refresh: "刷新弹幕",
@@ -1676,6 +1877,7 @@ window.__ModuleLoader__.load({
         recentRooms: "最近连接",
         configuredRoom: "默认直播间",
         openRoom: "打开",
+        forgetRoom: "从最近连接移除",
         waitingNew: "等待新弹幕…",
         minimizeWindow: "最小化",
         ungroupAll: "全部收到悬浮窗",
@@ -1707,6 +1909,12 @@ window.__ModuleLoader__.load({
         sent: "Sent",
         noCredential: "No login credential configured",
         credentialHint: "Credential is missing bili_jct",
+        credential: "Login",
+        credentialMissing: "not configured",
+        credentialExpired: "expired, please update",
+        credentialValid: "valid",
+        credentialUnknown: "could not verify",
+        credentialNoCsrf: "missing send token",
         hostNotReady: "Plugin backend not ready, restart the dsh service",
         sendFailed: "Send failed",
         refresh: "Refresh danmaku",
@@ -1735,6 +1943,7 @@ window.__ModuleLoader__.load({
         recentRooms: "Recently connected",
         configuredRoom: "Default room",
         openRoom: "Open",
+        forgetRoom: "Remove from recently connected",
         waitingNew: "Waiting for new danmaku…",
         minimizeWindow: "Minimize",
         ungroupAll: "Put all in the ball",
@@ -1752,6 +1961,12 @@ window.__ModuleLoader__.load({
       var MAX_TITLE = 40;
       var DRAG_SLOP2 = 4;
       var DOUBLE_CLICK_MS = 400;
+      var EDGE_MARGIN = 4;
+      function grips(leftwards) {
+        const color = "var(--dsw-alias-label-tertiary, #bbb)";
+        const angle = leftwards ? "225deg" : "135deg";
+        return `linear-gradient(${angle}, transparent 45%, ${color} 45%, ${color} 55%, transparent 55%), linear-gradient(${angle}, transparent 68%, ${color} 68%, ${color} 78%, transparent 78%)`;
+      }
       var MIN_SUMMARY_CHARS = 48;
       var MAX_NAME_CHARS = 8;
       var MAX_NAME_FRACTION = "40%";
@@ -1966,15 +2181,21 @@ window.__ModuleLoader__.load({
           }
         }, [props, instance.alias]);
         const onResizeDown = (0, import_react3.useCallback)(
-          (event) => {
+          (edge) => (event) => {
             event.stopPropagation();
+            const rect = cardRef.current?.getBoundingClientRect();
             resizeStartRef.current = {
               width: props.width,
               height: props.height,
               x: event.clientX,
-              y: event.clientY
+              y: event.clientY,
+              // A card pinned by `right` has no left edge in state, so the on-screen box
+              // is measured once here rather than assumed.
+              left: rect?.left ?? 0,
+              top: rect?.top ?? 0,
+              edge: edge === "left" || edge === "bottom-left" ? "left" : edge === "right" || edge === "bottom-right" ? "right" : "none"
             };
-            setResizing({ width: props.width, height: props.height });
+            setResizing({ width: props.width, height: props.height, left: null });
             event.currentTarget.setPointerCapture?.(event.pointerId);
           },
           [props.width, props.height]
@@ -1982,21 +2203,48 @@ window.__ModuleLoader__.load({
         const onResizeMove = (0, import_react3.useCallback)((event) => {
           const start = resizeStartRef.current;
           if (!start) return;
+          const sideways = start.edge !== "none";
+          const fixedLeft = start.edge === "right";
+          const roomWidth = fixedLeft ? window.innerWidth - start.left - EDGE_MARGIN : start.left + start.width - EDGE_MARGIN;
+          const deltaX = start.edge === "right" ? event.clientX - start.x : start.x - event.clientX;
+          const width = sideways ? clampLength(
+            start.width + deltaX,
+            start.width,
+            MIN_WINDOW_WIDTH,
+            Math.max(MIN_WINDOW_WIDTH, Math.min(MAX_WINDOW_WIDTH, roomWidth))
+          ) : start.width;
+          const roomHeight = window.innerHeight - start.top - EDGE_MARGIN;
+          const height = clampLength(
+            start.height + (event.clientY - start.y),
+            start.height,
+            MIN_WINDOW_HEIGHT,
+            Math.max(MIN_WINDOW_HEIGHT, Math.min(MAX_WINDOW_HEIGHT, roomHeight))
+          );
           setResizing({
-            width: clampLength(start.width + (event.clientX - start.x), start.width, MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH),
-            height: clampLength(start.height + (event.clientY - start.y), start.height, MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT)
+            width,
+            height,
+            // The edge that stays put is the one the gesture does not touch, so the moving
+            // coordinate is derived from the size that was actually applied. Deriving it from
+            // the pointer instead would let a clamped size keep drifting past the edge.
+            left: start.edge !== "left" ? null : start.left + start.width - width
           });
         }, []);
         const onResizeUp = (0, import_react3.useCallback)(
           (event) => {
-            if (!resizeStartRef.current) return;
+            const start = resizeStartRef.current;
+            if (!start) return;
             resizeStartRef.current = null;
             event.currentTarget.releasePointerCapture?.(event.pointerId);
-            const size2 = resizing;
+            const size = resizing;
             setResizing(null);
-            if (size2 !== null) props.onResizeEnd(size2);
+            if (size === null) return;
+            props.onResizeEnd({
+              width: size.width,
+              height: size.height,
+              place: size.left === null || instance.place === null ? instance.place : { x: size.left, y: instance.place.y }
+            });
           },
-          [props, resizing]
+          [props, resizing, instance.place]
         );
         const submit = (0, import_react3.useCallback)(async () => {
           const text = reply.trim();
@@ -2018,8 +2266,11 @@ window.__ModuleLoader__.load({
         const scale = props.uiScale / 100;
         const sp = (value) => px(value, scale);
         const icon = iconOf(scale);
-        const position = settled ? { left: settled.x, top: settled.y } : minimized ? { right: 18, bottom: 18 + 34 + props.ballSize + props.slot * sp(MINIMIZED_STEP) } : { right: 18, bottom: 18 + 34 + props.ballSize };
-        const size = resizing ?? { width: props.width, height: props.height };
+        const live = resizing === null ? { width: props.width, height: props.height } : { width: resizing.width, height: resizing.height };
+        const box = cardRef.current === null ? null : { left: cardRef.current.getBoundingClientRect().left, top: cardRef.current.getBoundingClientRect().top };
+        const leftwards = resizeStartRef.current === null ? box !== null && box.left + live.width > window.innerWidth - EDGE_MARGIN * 2 : resizeStartRef.current.edge === "left";
+        const base = settled !== null ? { left: settled.x, top: settled.y } : minimized ? { right: 18, bottom: 18 + 34 + props.ballSize + props.slot * sp(MINIMIZED_STEP) } : { right: 18, bottom: 18 + 34 + props.ballSize };
+        const position = resizing === null || resizing.left === null ? base : { ...base, left: resizing.left };
         return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
           "div",
           {
@@ -2030,8 +2281,8 @@ window.__ModuleLoader__.load({
               zIndex: 59,
               // A minimized window is only its title bar, so a stored height would leave
               // an empty card hanging below it.
-              width: size.width,
-              height: minimized ? void 0 : size.height,
+              width: live.width,
+              height: minimized ? void 0 : live.height,
               maxWidth: "calc(100vw - 24px)",
               maxHeight: "calc(100vh - 24px)",
               pointerEvents: "auto",
@@ -2309,27 +2560,81 @@ window.__ModuleLoader__.load({
                   ]
                 }
               ),
-              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-                "div",
-                {
-                  onPointerDown: onResizeDown,
-                  onPointerMove: onResizeMove,
-                  onPointerUp: onResizeUp,
-                  onPointerCancel: onResizeUp,
-                  title: t("resizeHint"),
-                  style: {
-                    position: "absolute",
-                    right: 0,
-                    bottom: 0,
-                    width: sp(14),
-                    height: sp(14),
-                    cursor: "nwse-resize",
-                    touchAction: "none",
-                    // Two short strokes read as a grip without needing an icon asset.
-                    background: "linear-gradient(135deg, transparent 45%, var(--dsw-alias-label-tertiary, #bbb) 45%, var(--dsw-alias-label-tertiary, #bbb) 55%, transparent 55%), linear-gradient(135deg, transparent 68%, var(--dsw-alias-label-tertiary, #bbb) 68%, var(--dsw-alias-label-tertiary, #bbb) 78%, transparent 78%)"
+              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                  "div",
+                  {
+                    onPointerDown: onResizeDown("left"),
+                    onPointerMove: onResizeMove,
+                    onPointerUp: onResizeUp,
+                    onPointerCancel: onResizeUp,
+                    title: t("resizeHint"),
+                    style: { position: "absolute", left: 0, top: 0, bottom: 0, width: sp(6), cursor: "ew-resize", touchAction: "none" }
                   }
-                }
-              )
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                  "div",
+                  {
+                    onPointerDown: onResizeDown("right"),
+                    onPointerMove: onResizeMove,
+                    onPointerUp: onResizeUp,
+                    onPointerCancel: onResizeUp,
+                    title: t("resizeHint"),
+                    style: { position: "absolute", right: 0, top: 0, bottom: 0, width: sp(6), cursor: "ew-resize", touchAction: "none" }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                  "div",
+                  {
+                    onPointerDown: onResizeDown("bottom"),
+                    onPointerMove: onResizeMove,
+                    onPointerUp: onResizeUp,
+                    onPointerCancel: onResizeUp,
+                    title: t("resizeHint"),
+                    style: { position: "absolute", left: sp(6), right: sp(6), bottom: 0, height: sp(6), cursor: "ns-resize", touchAction: "none" }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                  "div",
+                  {
+                    onPointerDown: onResizeDown("bottom-left"),
+                    onPointerMove: onResizeMove,
+                    onPointerUp: onResizeUp,
+                    onPointerCancel: onResizeUp,
+                    title: t("resizeHint"),
+                    style: {
+                      position: "absolute",
+                      left: 0,
+                      bottom: 0,
+                      width: sp(14),
+                      height: sp(14),
+                      cursor: "nesw-resize",
+                      touchAction: "none",
+                      ...leftwards ? { background: grips(true) } : {}
+                    }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                  "div",
+                  {
+                    onPointerDown: onResizeDown("bottom-right"),
+                    onPointerMove: onResizeMove,
+                    onPointerUp: onResizeUp,
+                    onPointerCancel: onResizeUp,
+                    title: t("resizeHint"),
+                    style: {
+                      position: "absolute",
+                      right: 0,
+                      bottom: 0,
+                      width: sp(14),
+                      height: sp(14),
+                      cursor: "nwse-resize",
+                      touchAction: "none",
+                      ...leftwards ? {} : { background: grips(false) }
+                    }
+                  }
+                )
+              ] })
             ]
           }
         );
@@ -2449,6 +2754,7 @@ window.__ModuleLoader__.load({
         );
         const ballSize = front.ballSize;
         const windowSize = { width: front.width, height: front.height };
+        const [menuBox, setMenuBox] = (0, import_react4.useState)(null);
         const [ballPlace, setBallPlace] = (0, import_react4.useState)(
           saved.ballPlace ?? null
         );
@@ -2478,6 +2784,9 @@ window.__ModuleLoader__.load({
             disposed = true;
           };
         }, [adoptBoot]);
+        const refreshCredential = (0, import_react4.useCallback)(() => {
+          void fetchCredential().then((next) => setCredential(next));
+        }, []);
         (0, import_react4.useEffect)(() => {
           let disposed = false;
           void fetchCredential().then((next) => {
@@ -2547,6 +2856,12 @@ window.__ModuleLoader__.load({
             ballPlace: placeRef.current,
             host: bootSeen.current
           });
+        }, []);
+        const forgetRoom = (0, import_react4.useCallback)((room) => {
+          const saved2 = loadState();
+          const next = (saved2.recentRooms ?? []).filter((entry) => entry.room !== room);
+          saveState({ ...saved2, recentRooms: next });
+          setRecent((previous) => previous.filter((entry) => entry.room !== room));
         }, []);
         const cache = (0, import_react4.useRef)([]);
         const joinRooms = (0, import_react4.useCallback)(() => {
@@ -2711,6 +3026,7 @@ window.__ModuleLoader__.load({
               uiScale: front.uiScale,
               onResizeEnd: (size) => {
                 saveState({ ...loadState(), windowWidth: size.width, windowHeight: size.height });
+                if (size.place !== null && size.place !== instance.place) dragRoom(instance.key, size.place);
               }
             },
             instance.key
@@ -2722,15 +3038,24 @@ window.__ModuleLoader__.load({
               rooms: instances,
               candidates,
               configuredRoom: config.defaultRoom,
+              credential,
+              menuBox,
+              onMenuResize: setMenuBox,
               size: ballSize,
               uiScale: front.uiScale,
               open: menuOpen,
-              onToggleMenu: () => setMenuOpen((value) => !value),
+              onToggleMenu: () => {
+                setMenuOpen((value) => {
+                  if (!value) refreshCredential();
+                  return !value;
+                });
+              },
               onShowWindow: (key) => setView(key, "window"),
               onHideWindow: (key) => setView(key, "hidden"),
               onRemove: removeRoom,
               onRename: renameRoom,
               onAddRoom: addRoom,
+              onForgetRoom: forgetRoom,
               onShowAll: showAll,
               onHideAll: hideAll,
               place: ballPlace,
