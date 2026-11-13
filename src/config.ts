@@ -91,6 +91,8 @@ export interface Config {
    * its own. The credential row still reports the verdict when asked.
    */
   checkCredentialOnLoad: Volatile<boolean>
+  /** Prefer the hand-maintained refs credential over the scanned login. */
+  preferCustomCredential: Volatile<boolean>
 }
 
 /**
@@ -111,8 +113,8 @@ export const Config = Schema.object({
   autoConnect: Schema.boolean()
     .default(false)
     .volatile()
-    .description('Connect to the default room as soon as the page loads.')
-    .i18n({ zh: '页面加载后自动连接默认直播间。' }),
+    .description('Connect to the default room as soon as the page loads. Also gates the load-time credential notice, which only explains a failure this connection would cause.')
+    .i18n({ zh: '页面加载后自动连接默认直播间。同时决定加载时是否弹出凭据提示，该提示只解释这个自动连接会遇到的失败。' }),
   historyLimit: Schema.natural()
     .min(20)
     .max(2000)
@@ -169,11 +171,16 @@ export const Config = Schema.object({
     .volatile()
     .description('Timeout for one Bilibili API request, in milliseconds.')
     .i18n({ zh: '请求 Bilibili 接口的超时时间（毫秒）。' }),
+  preferCustomCredential: Schema.boolean()
+    .default(true)
+    .volatile()
+    .description('Prefer BILIBILI_SESSDATA and BILIBILI_JCT from the dsh refs credential, falling back to the scanned login when they are unusable.')
+    .i18n({ zh: '优先使用自定义凭据。启用后优先使用 dsh refs 凭据中配置的 BILIBILI_SESSDATA 和 BILIBILI_JCT，这些凭据不可用时回退到扫码登录获得的登录态。' }),
   checkCredentialOnLoad: Schema.boolean()
     .default(true)
     .volatile()
-    .description('Check the stored login when the page loads and raise a notice when it is unusable.')
-    .i18n({ zh: '自动检查登录凭据有效性。页面加载时检查，凭据不可用时弹窗说明。' }),
+    .description('Check the stored login when the page loads and raise a notice when it is unusable. Runs only while automatic connection is on, because otherwise the overlay does nothing on load for the notice to explain.')
+    .i18n({ zh: '自动检查登录凭据有效性。页面加载时检查，凭据不可用时弹窗说明。仅在自动连接开启时生效，否则加载时插件不主动做任何事，弹窗无从解释。' }),
 })
 
 /**
@@ -232,6 +239,7 @@ export interface Limits {
    * so a reader who does not want a notice on every load still has a way to ask.
    */
   readonly checkCredentialOnLoad: boolean
+  readonly preferCustomCredential: boolean
 }
 
 /**
@@ -250,5 +258,9 @@ export function readLimits(config: Partial<Config> | undefined): Limits {
     showEnterMessages: readField(config?.showEnterMessages, true),
     showSuperChat: readField(config?.showSuperChat, true),
     checkCredentialOnLoad: readField(config?.checkCredentialOnLoad, true),
+    // True by default so an installation that already maintained refs credentials keeps
+    // using them after upgrading. Reading the scanned store first would silently move
+    // every existing user off the credential they set up by hand.
+    preferCustomCredential: readField(config?.preferCustomCredential, true),
   }
 }

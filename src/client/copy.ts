@@ -36,13 +36,20 @@ export type CopyKey =
   | 'credential'
   | 'credentialMissing'
   | 'credentialExpired'
+  | 'credentialExpiredScanned'
+  | 'credentialUnreadable'
   | 'credentialValid'
   | 'credentialUnknown'
+  | 'credentialFromCustom'
+  | 'credentialFromScanned'
   | 'credentialNoCsrf'
   | 'credentialExpiredTitle'
   | 'credentialExpiredBody'
+  | 'credentialExpiredBodyRefs'
+  | 'credentialExpiredBodyScanned'
   | 'credentialMissingTitle'
   | 'credentialMissingBody'
+  | 'credentialMissingBodyRefs'
   | 'credentialUnreadableTitle'
   | 'credentialUnreadableBody'
   | 'credentialNoCsrfTitle'
@@ -50,8 +57,16 @@ export type CopyKey =
   | 'credentialNoticeTitle'
   | 'credentialNoticeBody'
   | 'qrLogin'
-  | 'qrLoginPendingTitle'
-  | 'qrLoginPendingBody'
+  | 'qrStarting'
+  | 'qrWaiting'
+  | 'qrScanned'
+  | 'qrExpired'
+  | 'qrFailed'
+  | 'qrRefresh'
+  | 'qrCode'
+  | 'qrSignedInTitle'
+  | 'qrSignedInBody'
+  | 'qrSignedInAs'
   | 'confirm'
   | 'hostNotReady'
   | 'sendFailed'
@@ -120,14 +135,24 @@ export const zh: Dictionary = {
   credential: '登录凭据',
   credentialMissing: '未配置',
   credentialExpired: '已失效，请更新',
+  credentialExpiredScanned: '扫码登录已失效，请重新扫码',
+  credentialUnreadable: '无法读取，请检查格式',
   credentialValid: '有效',
   credentialUnknown: '无法验证',
+  credentialFromCustom: '来源：refs 凭据',
+  credentialFromScanned: '来源：扫码登录',
   credentialNoCsrf: '缺少发言令牌',
   credentialExpiredTitle: '登录凭据失效',
   credentialExpiredBody:
-    '您的哔哩哔哩账号登录态（dsh refs 凭据中配置的 BILIBILI_SESSDATA 或 BILIBILI_JCT）已过期，需要进行更新。你可以使用扫码登录重新授权，也可以手动更新凭据。',
+    '您的哔哩哔哩账号登录态已过期，需要进行更新。你可以使用扫码登录重新授权，也可以手动更新凭据。',
+  credentialExpiredBodyRefs:
+    '您在 dsh refs 凭据中配置的 BILIBILI_SESSDATA 或 BILIBILI_JCT 已过期，需要进行更新。你可以使用扫码登录重新授权，也可以手动更新凭据。',
+  credentialExpiredBodyScanned:
+    '扫码登录获得的登录态已过期，需要重新授权。点击下方按钮重新扫码即可。',
   credentialMissingTitle: '未配置登录凭据',
   credentialMissingBody:
+    '未找到可用的登录凭据，插件无法以您的账号发言或读取需要登录的内容。你可以使用扫码登录，也可以手动配置凭据。',
+  credentialMissingBodyRefs:
     '在 dsh refs 凭据中未找到 BILIBILI_SESSDATA，插件无法以您的账号发言或读取需要登录的内容。你可以使用扫码登录，也可以手动配置凭据。',
   credentialUnreadableTitle: '无法读取登录凭据',
   credentialUnreadableBody:
@@ -138,8 +163,16 @@ export const zh: Dictionary = {
   credentialNoticeTitle: '登录凭据不可用',
   credentialNoticeBody: '登录凭据当前不可用，详情见悬浮球菜单中的登录凭据一行。',
   qrLogin: '扫码登录',
-  qrLoginPendingTitle: '扫码登录',
-  qrLoginPendingBody: '扫码登录功能尚未实现。',
+  qrStarting: '正在获取二维码…',
+  qrWaiting: '请使用哔哩哔哩手机客户端扫码，剩余 ',
+  qrScanned: '已扫码，请在手机上确认登录',
+  qrExpired: '二维码已失效，请重新获取',
+  qrFailed: '获取二维码失败，请稍后重试',
+  qrRefresh: '重新获取',
+  qrCode: '登录二维码',
+  qrSignedInTitle: '登录成功',
+  qrSignedInBody: '账号已登录。',
+  qrSignedInAs: '已登录：',
   confirm: '确认',
   hostNotReady: '插件后端未就绪，请重启 dsh 服务',
   sendFailed: '发送失败',
@@ -207,14 +240,24 @@ export const en: Dictionary = {
   credential: 'Login',
   credentialMissing: 'not configured',
   credentialExpired: 'expired, please update',
+  credentialExpiredScanned: 'QR sign-in expired, scan again',
+  credentialUnreadable: 'cannot read, check the format',
   credentialValid: 'valid',
   credentialUnknown: 'could not verify',
+  credentialFromCustom: 'from refs credential',
+  credentialFromScanned: 'from QR sign-in',
   credentialNoCsrf: 'missing send token',
   credentialExpiredTitle: 'Login credential expired',
   credentialExpiredBody:
-    'The session for your Bilibili account (BILIBILI_SESSDATA or BILIBILI_JCT in the dsh refs credential) has expired and has to be renewed. Sign in with a QR code to authorise again, or update the credential by hand.',
+    'The session for your Bilibili account has expired and has to be renewed. Sign in with a QR code to authorise again, or update the credential by hand.',
+  credentialExpiredBodyRefs:
+    'BILIBILI_SESSDATA or BILIBILI_JCT in the dsh refs credential has expired and has to be renewed. Sign in with a QR code to authorise again, or update the credential by hand.',
+  credentialExpiredBodyScanned:
+    'The session obtained by scanning a QR code has expired and has to be renewed. Scan a new code to authorise again.',
   credentialMissingTitle: 'No login credential',
   credentialMissingBody:
+    'No usable login credential was found, so the plugin cannot post as your account or read anything that needs a login. Sign in with a QR code, or configure the credential by hand.',
+  credentialMissingBodyRefs:
     'BILIBILI_SESSDATA is not present in the dsh refs credential, so the plugin cannot post as your account or read anything that needs a login. Sign in with a QR code, or configure the credential by hand.',
   credentialUnreadableTitle: 'Login credential cannot be read',
   credentialUnreadableBody:
@@ -226,8 +269,16 @@ export const en: Dictionary = {
   credentialNoticeBody:
     'The login credential is not usable right now. The credential row in the ball menu says why.',
   qrLogin: 'Scan QR code',
-  qrLoginPendingTitle: 'Scan QR code',
-  qrLoginPendingBody: 'Scanning a QR code is not available yet.',
+  qrStarting: 'Getting a code…',
+  qrWaiting: 'Scan with the Bilibili mobile app. Time left: ',
+  qrScanned: 'Scanned. Confirm the sign-in on your phone.',
+  qrExpired: 'The code has expired. Get a new one.',
+  qrFailed: 'Could not get a code. Try again in a moment.',
+  qrRefresh: 'Get a new code',
+  qrCode: 'Sign-in QR code',
+  qrSignedInTitle: 'Signed in',
+  qrSignedInBody: 'The account is signed in.',
+  qrSignedInAs: 'Signed in as ',
   confirm: 'OK',
   hostNotReady: 'Plugin backend not ready, restart the dsh service',
   sendFailed: 'Send failed',

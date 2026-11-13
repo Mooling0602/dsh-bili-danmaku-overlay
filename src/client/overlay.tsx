@@ -58,6 +58,7 @@ import {
   type RoomCandidate,
 } from './ball.tsx'
 import { Dialog, type DialogSpec } from './dialog.tsx'
+import { QrLoginDialog } from './qrdialog.tsx'
 import { credentialNotice } from './notices.ts'
 import { RoomStore, type RoomInstance, type RoomView } from './rooms.ts'
 import { DanmakuWindow } from './window.tsx'
@@ -188,20 +189,26 @@ export function Overlay(props: OverlayProps) {
   const [notice, setNotice] = useState<DialogSpec | null>(null)
 
   /**
-   * Answer the QR sign-in button until the flow itself exists.
+   * Whether the sign-in surface is showing.
    *
-   * The button is reserved before the flow is built so the notice does not have to
-   * change shape twice. It says plainly that nothing is behind it yet, because a
-   * button that silently did nothing would read as a broken plugin rather than an
-   * unfinished one.
+   * Its two states are independent: the surface can be closed while the Host still
+   * holds a live key, and the notice below can close while the surface stays open. That
+   * is deliberate, because dismissing the explanation is not the same decision as
+   * abandoning the scan.
+   */
+  const [qrOpen, setQrOpen] = useState(false)
+
+  /**
+   * Swap the notice for the sign-in surface.
+   *
+   * The notice closes here rather than in the action handler, because the action is
+   * marked as replacing its own notice: the layer stands aside and leaves the swap in
+   * one place.
    */
   const openQrLogin = useCallback((): void => {
-    setNotice({
-      title: t('qrLoginPendingTitle'),
-      message: t('qrLoginPendingBody'),
-      actions: [{ label: t('confirm'), primary: true }],
-    })
-  }, [t])
+    setNotice(null)
+    setQrOpen(true)
+  }, [])
   /**
    * Browser-owned presentation settings.
    *
@@ -332,6 +339,17 @@ export function Overlay(props: OverlayProps) {
   }, [])
 
   /**
+   * Re-read the credential after a completed sign-in.
+   *
+   * The surface has just replaced the stored login, so the menu's row and the reply box
+   * have to see the new one; without this they keep reporting the condition that made
+   * the reader reach for the sign-in in the first place.
+   */
+  const afterSignIn = useCallback((): void => {
+    refreshCredential()
+  }, [refreshCredential])
+
+  /**
    * The load-time check, which is also the only place a notice is raised on its own.
    *
    * It waits for the Host's configuration before deciding, because the flag that
@@ -339,9 +357,18 @@ export function Overlay(props: OverlayProps) {
    * it once the settings say otherwise would flash a modal at a reader who turned the
    * behaviour off. Waiting for the flag also means a Host that never answers simply
    * never raises one, instead of the page guessing.
+   *
+   * It also requires `autoConnect`. This notice exists because an unusable credential
+   * makes something the overlay does by itself fail with no visible cause, and with
+   * automatic connection off the overlay does nothing on load: a reader who has not
+   * opened a room has nothing failing in front of them, so interrupting them with a
+   * modal asks them to fix a problem they did not encounter. The menu's credential row
+   * still reports the same condition the moment they open it, so the report is waiting
+   * rather than withheld.
    */
   useEffect(() => {
     if (config.checkCredentialOnLoad !== true) return
+    if (config.autoConnect !== true) return
     let disposed = false
     void fetchCredential().then((next) => {
       if (disposed) return
@@ -355,7 +382,7 @@ export function Overlay(props: OverlayProps) {
     return () => {
       disposed = true
     }
-  }, [config.checkCredentialOnLoad, t])
+  }, [config.checkCredentialOnLoad, config.autoConnect, t])
 
   /**
    * Create a store for a room and connect it.
@@ -746,6 +773,14 @@ export function Overlay(props: OverlayProps) {
         onClose={() => setNotice(null)}
         uiScale={front.uiScale}
         t={t}
+      />
+      <QrLoginDialog
+        open={qrOpen}
+        onClose={() => setQrOpen(false)}
+        uiScale={front.uiScale}
+        t={t}
+        existingUname={credential?.scanned?.uname ?? credential?.uname}
+        onSignedIn={afterSignIn}
       />
     </>
   )

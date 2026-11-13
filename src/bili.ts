@@ -59,6 +59,14 @@ interface BiliJsonOptions {
   readonly allowCodes?: readonly number[]
   /** Per-request timeout override in milliseconds. */
   readonly timeoutMs?: number
+  /**
+   * Whether the hand-maintained credential outranks the scanned login.
+   *
+   * Threaded through rather than read from a module global, because the choice belongs
+   * to the configuration snapshot of the request being served and two requests can
+   * carry different settings.
+   */
+  readonly preferCustomCredential?: boolean
 }
 
 /**
@@ -88,7 +96,7 @@ async function biliJson<T>(
   // round every time. A missing credential stays non-fatal — public endpoints
   // still work — so the plugin remains usable before the user configures one.
   try {
-    const cookie = buildCookie()
+    const cookie = buildCookie(options.preferCustomCredential ?? true)
     if (cookie !== '') headers.Cookie = cookie
   } catch {
     /* no credential configured yet */
@@ -382,6 +390,7 @@ export interface RawDanmaku {
  * @param roomInput - the room id or short id the user typed.
  * @param text - the message body.
  * @param timeoutMs - request timeout in milliseconds.
+ * @param preferCustomCredential - whether the refs credential outranks the scanned one.
  * @returns the resolved room id and the text that was sent.
  * @throws {BiliError} when the room, the credential, or the send is rejected.
  */
@@ -389,6 +398,7 @@ export async function sendDanmaku(
   roomInput: number,
   text: string,
   timeoutMs = 12_000,
+  preferCustomCredential = true,
 ): Promise<{ roomId: number; text: string }> {
   const message = text.trim()
   if (message === '') throw new BiliError('弹幕内容不能为空')
@@ -396,7 +406,7 @@ export async function sendDanmaku(
     throw new BiliError(`弹幕最多 ${MAX_DANMAKU_CHARS} 个字符`)
   }
 
-  const cookie = buildCookie()
+  const cookie = buildCookie(preferCustomCredential)
   const csrf = cookieValue(cookie, 'bili_jct')
   if (csrf === '') {
     throw new BiliError(

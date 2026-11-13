@@ -43,6 +43,8 @@ export interface StreamOptions {
   readonly showEnterMessages: boolean
   /** Whether super chats are forwarded. */
   readonly showSuperChat: boolean
+  /** Whether the refs credential outranks the scanned login. */
+  readonly preferCustomCredential: boolean
 }
 
 /**
@@ -405,6 +407,7 @@ export async function fetchHistory(
   roomId: number,
   fetchCount: number,
   timeoutMs = 12_000,
+  preferCustomCredential = true,
 ): Promise<HistoryItem[]> {
   const url =
     'https://api.live.bilibili.com/xlive/web-room/v1/dM/gethistory' +
@@ -418,7 +421,7 @@ export async function fetchHistory(
   // A missing or unreadable credential is not fatal here: history is a
   // convenience, and the live socket still works without it.
   try {
-    const cookie = buildCookie()
+    const cookie = buildCookie(preferCustomCredential)
     if (cookie !== '') headers.Cookie = cookie
   } catch {
     /* fall through anonymously */

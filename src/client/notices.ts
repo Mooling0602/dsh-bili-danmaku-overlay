@@ -51,11 +51,53 @@ const TITLES: Readonly<Record<string, CopyKey>> = {
   'no-csrf': 'credentialNoCsrfTitle',
 }
 
+/**
+ * The body for a condition, chosen by which store the login came from.
+ *
+ * The generic sentence names no file, and it is what both a reader with no
+ * credential at all and one whose scanned login lapsed see. The refs variant is used
+ * only when that store is the one at fault, because telling a reader to update a
+ * section that is not the source of their problem sends them to edit the wrong place.
+ */
 const BODIES: Readonly<Record<string, CopyKey>> = {
   expired: 'credentialExpiredBody',
   missing: 'credentialMissingBody',
   unreadable: 'credentialUnreadableBody',
   'no-csrf': 'credentialNoCsrfBody',
+}
+
+/** Bodies that name the refs section, used when that store is the one reporting. */
+const BODIES_FROM_REFS: Readonly<Record<string, CopyKey>> = {
+  expired: 'credentialExpiredBodyRefs',
+  missing: 'credentialMissingBodyRefs',
+}
+
+/** Bodies that name a scanned login, used when that store is the one reporting. */
+const BODIES_FROM_SCANNED: Readonly<Record<string, CopyKey>> = {
+  expired: 'credentialExpiredBodyScanned',
+}
+
+/**
+ * The body key for a condition, given the store the login came from.
+ *
+ * `source` is absent when neither store produced a session, and that is exactly the
+ * case that must not claim the refs section is stale: the reader may never have
+ * written one. In that state the generic sentence is the only accurate one.
+ *
+ * @param code - the condition the Host reported.
+ * @param source - the store the credential came from, or undefined for neither.
+ * @returns the dictionary key to read, or undefined for a code this build lacks.
+ */
+function bodyKeyFor(code: string, source: 'custom' | 'scanned' | undefined): CopyKey | undefined {
+  if (source === 'custom') {
+    const refs = BODIES_FROM_REFS[code]
+    if (refs !== undefined) return refs
+  }
+  if (source === 'scanned') {
+    const scanned = BODIES_FROM_SCANNED[code]
+    if (scanned !== undefined) return scanned
+  }
+  return BODIES[code]
 }
 
 /**
@@ -108,6 +150,35 @@ function bodyText(
   const namesWhatIsAbsent = credential.code === 'missing' && detail !== ''
   return namesWhatIsAbsent ? `${body}\n${detail}` : body
 }
+/**
+ * Word a credential condition in one short line, for the ball menu's row.
+ *
+ * It exists so the row and the notice say the same thing. The row used to print the
+ * Host's `reason`, which is written for whoever reads a log, while the notice printed
+ * the dictionary sentence, and a reader who saw both read two different accounts of one
+ * problem. The dictionary wins here for the same reason it wins in the notice, and the
+ * Host's sentence is the fallback only for a code this build has no wording for.
+ *
+ * @param credential - the reported credential.
+ * @param t - the page's own wording lookup.
+ * @returns the short line, or an empty string when nothing is wrong.
+ */
+export function credentialSummary(credential: Credential | null, t: (key: CopyKey) => string): string {
+  if (credential === null) return t('credentialUnknown')
+  const code = problemCode(credential)
+  if (code === null) {
+    return credential.configured ? '' : credential.error ?? t('credentialMissing')
+  }
+  if (code === 'expired') {
+    return credential.source === 'scanned' ? t('credentialExpiredScanned') : t('credentialExpired')
+  }
+  if (code === 'missing') return t('credentialMissing')
+  if (code === 'unreadable') return t('credentialUnreadable')
+  if (code === 'no-csrf') return t('credentialNoCsrf')
+  // A code this build has no wording for, which is a normal state rather than a
+  // defect because the Client bundle and the Host are versioned separately.
+  return credential.reason ?? credential.error ?? ''
+}
 
 /**
  * Build the notice for the current credential.
@@ -129,7 +200,7 @@ export function credentialNotice(input: CredentialNoticeInput): DialogSpec | nul
   const code = problemCode(credential)
   if (code === null) return null
   const titleKey = TITLES[code]
-  const bodyKey = BODIES[code]
+  const bodyKey = bodyKeyFor(code, credential.source)
   return {
     title: titleKey === undefined ? t('credentialNoticeTitle') : t(titleKey),
     // The dictionary words the condition, because it knows how to say what to do next.

@@ -32,7 +32,9 @@ dsh plugin --profile web remove dsh-bili-danmaku-overlay
 
 ## Credentials
 
-The plugin does not manage credentials. It reads `SESSDATA` and `bili_jct` from `~/.dsh/.credentials.yaml`, which you maintain.
+There are two ways to sign in, and either one is enough.
+
+The first is to put `SESSDATA` and `bili_jct` in `~/.dsh/.credentials.yaml`, which you maintain.
 
 ```yaml
 refs:
@@ -41,6 +43,10 @@ refs:
 ```
 
 To get the values: log in to Bilibili in a browser, open developer tools, then Application, then Cookies for `https://www.bilibili.com`, and copy the two values.
+
+The second is to scan a QR code from inside the plugin. When the plugin has no usable credential, the ball menu says so, and the notice it raises offers a scan. The login it obtains is stored in `~/.dsh/bili-danmaku-overlay/credential.json`, which is created readable only by you and is shared by every profile, so you scan once rather than once per profile.
+
+`preferCustomCredential` decides which one wins when both exist. It defaults to true, so the credential you wrote by hand is used first and the scanned login is the fallback. Turn it off to prefer the scanned login, for example when the hand-written token belongs to an account you no longer want to use.
 
 Watching needs only `SESSDATA`. Sending danmaku also needs `bili_jct`.
 
@@ -60,7 +66,8 @@ Every option is editable on the plugin settings page and applies immediately.
 | `showEnterMessages` | `true` | Show "entered the room" notices |
 | `showSuperChat` | `true` | Show super chat messages |
 | `requestTimeoutMs` | `12000` | Request timeout |
-| `checkCredentialOnLoad` | `true` | Check the stored login on load and raise a notice when it is unusable |
+| `checkCredentialOnLoad` | `true` | Check the stored login on load and raise a notice when it is unusable. Takes effect only with `autoConnect` on |
+| `preferCustomCredential` | `true` | Prefer the credential in dsh refs over the login obtained by scanning a QR code; the other is used when the preferred one is unusable |
 
 ## Front-end settings
 

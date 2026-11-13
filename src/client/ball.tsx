@@ -26,6 +26,7 @@ import { clampLength } from './api.ts'
 import type { Credential } from './api.ts'
 import type { CopyKey } from './copy.ts'
 import { CloseIcon, EditIcon, HidePanelIcon, ShowPanelIcon } from './icons.tsx'
+import { credentialSummary } from './notices.ts'
 import { aggregateState, stateTone } from './rooms.ts'
 import type { RoomInstance } from './rooms.ts'
 
@@ -276,11 +277,11 @@ function CredentialRow({
   } else if (!credential.configured) {
     label = t('credential')
     tone = 'var(--dsw-alias-state-error-primary, #ef4444)'
-    detail = credential.error ?? t('credentialMissing')
+    detail = credentialSummary(credential, t)
   } else if (credential.valid === 'no') {
     label = t('credential')
     tone = 'var(--dsw-alias-state-error-primary, #ef4444)'
-    detail = credential.reason ?? t('credentialExpired')
+    detail = credentialSummary(credential, t)
   } else if (credential.valid === 'yes' && credential.hasCsrf === false) {
     label = t('credential')
     tone = 'var(--dsw-alias-state-warn-primary, #f59e0b)'
@@ -304,6 +305,14 @@ function CredentialRow({
       !credential.configured ||
       credential.valid === 'no' ||
       credential.hasCsrf === false)
+
+  // Two stores can hold a login and they can belong to different accounts, so the row
+  // names the one in effect. Without it a reader who changed the setting has no way to
+  // tell which account the name beside it belongs to.
+  if (credential !== null && credential.source !== undefined && detail !== '') {
+    const origin = credential.source === 'custom' ? t('credentialFromCustom') : t('credentialFromScanned')
+    detail = `${detail} · ${origin}`
+  }
 
   return (
     <div

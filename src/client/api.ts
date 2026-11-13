@@ -132,6 +132,16 @@ export interface Credential {
    */
   readonly code?: string
   readonly error?: string
+  /**
+   * Which store the session in use came from.
+   *
+   * The refs credential and the scanned login can belong to different accounts, so the
+   * page names the one in effect rather than leaving a reader to wonder why the account
+   * shown is not the one they expected.
+   */
+  readonly source?: 'custom' | 'scanned'
+  /** What the scanned record says, whether or not its session still works. */
+  readonly scanned?: { readonly uname: string | null; readonly loggedInAt: string } | null
 }
 
 /** Server-side limits that shape rendering. */
@@ -142,6 +152,8 @@ export interface RemoteConfig {
   readonly autoConnect: boolean
   /** Whether the page checks the stored login when it loads. */
   readonly checkCredentialOnLoad?: boolean
+  /** Whether the refs credential outranks the scanned login. */
+  readonly preferCustomCredential?: boolean
   /** Identifies the Host process, so a temporary title can expire with it. */
   readonly boot?: string
 }
@@ -326,6 +338,49 @@ export async function fetchCredential(): Promise<Credential> {
     // already have, so the code says the Host could not be asked and the notice layer
     // stays quiet instead of guessing.
     return { ok: false, configured: false, code: 'unreachable' }
+  }
+}
+
+/** What a completed sign-in attempt reports. */
+export interface QrPollResult {
+  readonly ok: boolean
+  readonly state?: 'waiting' | 'scanned' | 'done' | 'expired' | 'error'
+  readonly uname?: string
+  readonly message?: string
+}
+
+/**
+ * Ask the Host for a fresh sign-in code.
+ *
+ * The Host draws the code, so the SVG crosses the wire as markup. That keeps the QR
+ * encoder out of this bundle, which the page has no other use for.
+ *
+ * @returns the SVG markup and its lifetime, or a failure note.
+ */
+export async function startQrLogin(): Promise<
+  { readonly ok: true; readonly svg: string; readonly expiresInMs: number } | { readonly ok: false; readonly error: string }
+> {
+  try {
+    const response = await fetch(`${BASE}/api/qr-login/start`, { method: 'POST' })
+    return (await response.json()) as
+      | { readonly ok: true; readonly svg: string; readonly expiresInMs: number }
+      | { readonly ok: false; readonly error: string }
+  } catch {
+    return { ok: false, error: '无法连接插件后端' }
+  }
+}
+
+/**
+ * Poll the code the Host is holding.
+ *
+ * @returns where the attempt stands.
+ */
+export async function pollQrLogin(): Promise<QrPollResult> {
+  try {
+    const response = await fetch(`${BASE}/api/qr-login/poll`)
+    return (await response.json()) as QrPollResult
+  } catch {
+    return { ok: false, state: 'error', message: '无法连接插件后端' }
   }
 }
 

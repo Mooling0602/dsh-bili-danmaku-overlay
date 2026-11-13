@@ -32,7 +32,9 @@ dsh plugin --profile web remove dsh-bili-danmaku-overlay
 
 ## 配置登录凭据
 
-插件不管理凭据，`SESSDATA` 和 `bili_jct` 从 `~/.dsh/.credentials.yaml` 读取，由你自己维护。
+有两种登录方式，任选其一即可。
+
+第一种是在 `~/.dsh/.credentials.yaml` 里放 `SESSDATA` 和 `bili_jct`，由你自己维护。
 
 ```yaml
 refs:
@@ -41,6 +43,10 @@ refs:
 ```
 
 取值方式：浏览器登录 B 站后打开开发者工具 → Application → Cookies → `https://www.bilibili.com`，复制这两个值。
+
+第二种是在插件里扫码登录。当插件没有可用的凭据时，悬浮球菜单会说明情况，弹窗里提供扫码入口。扫到的登录态存在 `~/.dsh/bili-danmaku-overlay/credential.json`，文件只有你自己可读，并且所有 profile 共用，因此只需扫一次而不是每个 profile 扫一次。
+
+两种凭据都存在时由 `preferCustomCredential` 决定用哪个，默认开启表示优先用你手写的那份，扫码登录作为回退。关掉它则优先用扫码登录，例如手写的那份属于你已经不想再用的账号。
 
 只看弹幕只需 `SESSDATA`，发弹幕还需要 `bili_jct`。
 
@@ -60,7 +66,8 @@ refs:
 | `showEnterMessages` | `true` | 显示「进入直播间」消息 |
 | `showSuperChat` | `true` | 显示醒目留言 |
 | `requestTimeoutMs` | `12000` | 接口请求超时 |
-| `checkCredentialOnLoad` | `true` | 页面加载时自动检查登录凭据，不可用时弹窗说明 |
+| `checkCredentialOnLoad` | `true` | 页面加载时检查登录凭据，不可用时弹窗说明；仅在自动连接开启时生效 |
+| `preferCustomCredential` | `true` | 优先使用 dsh refs 中的凭据而不是扫码登录获得的登录态；首选不可用时改用另一个 |
 
 ## 前端设置
 

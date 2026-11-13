@@ -109,6 +109,18 @@ const FIELDS = [
     hint: '醒目留言（Super Chat）在浮层里显示。',
     kind: 'switch',
   },
+  {
+    field: 'checkCredentialOnLoad',
+    label: '加载时检查登录',
+    hint: '页面加载时检查登录凭据，不可用时弹窗说明。仅在自动连接开启时生效，否则加载时插件不主动做任何事，弹窗无从解释。',
+    kind: 'switch',
+  },
+  {
+    field: 'preferCustomCredential',
+    label: '优先使用自定义凭据',
+    hint: '启用后优先使用 dsh refs 凭据中配置的 BILIBILI_SESSDATA 和 BILIBILI_JCT，这些凭据不可用时回退到扫码登录获得的登录态。',
+    kind: 'switch',
+  },
 ] as const
 
 /** The settings scope this plugin injects for its own namespace. */

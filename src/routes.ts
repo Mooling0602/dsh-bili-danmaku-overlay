@@ -10,6 +10,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { credentialStatus, BiliError } from './credentials.ts'
+import { pollQrLogin, qrDiagnostics, startQrLogin } from './qrlogin.ts'
+import { clearLogin, readLogin } from './store.ts'
 import { fetchRoomStats, normalizeRoomInput, resolveRoom, sendDanmaku } from './bili.ts'
 import { streamDanmaku } from './stream.ts'
 import { readHistory, watchHistory } from './poller.ts'
@@ -129,8 +131,46 @@ export async function route(
     // request rather than left to hang. A slow check still answers, with the
     // verdict left unknown, because telling the page nothing is worse than telling
     // it the truth was unavailable.
-    const status = await credentialStatus(limits.requestTimeoutMs)
-    sendJson(response, 200, status)
+    const status = await credentialStatus(limits.requestTimeoutMs, limits.preferCustomCredential)
+    // The scanned record carries the account name and login time even when the session
+    // is no longer usable, which is what lets the page say "signed in as X" or name the
+    // day the login went stale rather than only reporting a verdict.
+    const scanned = readLogin()
+    sendJson(response, 200, {
+      ...status,
+      scanned: scanned === null ? null : {
+        uname: scanned.uname ?? null,
+        loggedInAt: scanned.loggedInAt,
+      },
+    })
+    return
+  }
+
+  if (path === '/api/qr-login/start' && request.method === 'POST') {
+    try {
+      const started = await startQrLogin(limits.requestTimeoutMs)
+      sendJson(response, 200, { ok: true, ...started })
+    } catch (error) {
+      const message = error instanceof Error && error.message !== '' ? error.message : '无法获取登录二维码'
+      sendJson(response, 200, { ok: false, error: message })
+    }
+    return
+  }
+
+  if (path === '/api/qr-login/poll' && request.method === 'GET') {
+    const result = await pollQrLogin(limits.requestTimeoutMs)
+    sendJson(response, 200, { ok: true, ...result })
+    return
+  }
+
+  if (path === '/api/qr-login/diagnostics' && request.method === 'GET') {
+    sendJson(response, 200, { ok: true, ...qrDiagnostics() })
+    return
+  }
+
+  if (path === '/api/qr-login' && request.method === 'DELETE') {
+    const cleared = clearLogin()
+    sendJson(response, 200, { ok: true, cleared })
     return
   }
 
@@ -147,6 +187,7 @@ export async function route(
       // The page decides whether to check on load, so the flag travels with the
       // other rendering settings rather than being baked into the bundle.
       checkCredentialOnLoad: limits.checkCredentialOnLoad,
+      preferCustomCredential: limits.preferCustomCredential,
       // Identifies this Host process. A page keeps a temporary room title while
       // this value is unchanged and drops it when it differs, which is what makes
       // a rename last exactly one dsh run instead of accumulating forever.
@@ -215,6 +256,7 @@ export async function route(
       keepaliveMs: 15_000,
       showEnterMessages: limits.showEnterMessages,
       showSuperChat: limits.showSuperChat,
+      preferCustomCredential: limits.preferCustomCredential,
     })
     // The stream owns the response from here; returning without ending it is
     // what keeps the connection open.
@@ -225,7 +267,12 @@ export async function route(
     const body = await readJsonBody(request)
     const room = normalizeRoomInput(body.room)
     if (room === null) throw new BiliError('房间号无效')
-    const result = await sendDanmaku(room, String(body.text ?? ''), limits.requestTimeoutMs)
+    const result = await sendDanmaku(
+      room,
+      String(body.text ?? ''),
+      limits.requestTimeoutMs,
+      limits.preferCustomCredential,
+    )
     sendJson(response, 200, { ok: true, ...result })
     return
   }
