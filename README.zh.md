@@ -60,6 +60,7 @@ refs:
 | `showEnterMessages` | `true` | 显示「进入直播间」消息 |
 | `showSuperChat` | `true` | 显示醒目留言 |
 | `requestTimeoutMs` | `12000` | 接口请求超时 |
+| `checkCredentialOnLoad` | `true` | 页面加载时自动检查登录凭据，不可用时弹窗说明 |
 
 ## 前端设置
 

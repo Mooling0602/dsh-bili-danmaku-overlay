@@ -120,8 +120,17 @@ export interface Credential {
   readonly valid?: 'yes' | 'no' | 'unknown'
   /** Account name, present only when the session was accepted. */
   readonly uname?: string
-  /** Why the session was rejected. */
+  /** Why the session was rejected, as the Host worded it. */
   readonly reason?: string
+  /**
+   * A stable name for that condition, which is what the page word its own text from.
+   *
+   * The page cannot word a notice from `reason`: that string is written for whoever
+   * reads a log, and a login method added later will supply its own reasons. The code
+   * is therefore the contract, and `reason` stays as the fallback for a code this
+   * build does not know, so a page that is a version behind still says something true.
+   */
+  readonly code?: string
   readonly error?: string
 }
 
@@ -131,6 +140,8 @@ export interface RemoteConfig {
   readonly statsIntervalMs: number
   readonly defaultRoom: string
   readonly autoConnect: boolean
+  /** Whether the page checks the stored login when it loads. */
+  readonly checkCredentialOnLoad?: boolean
   /** Identifies the Host process, so a temporary title can expire with it. */
   readonly boot?: string
 }
@@ -310,7 +321,11 @@ export async function fetchCredential(): Promise<Credential> {
     const response = await fetch(`${BASE}/api/credential`)
     return (await response.json()) as Credential
   } catch {
-    return { ok: false, configured: false }
+    // A failed request is not a missing credential. Reporting it as `configured:
+    // false` would word a notice telling the reader to configure something they may
+    // already have, so the code says the Host could not be asked and the notice layer
+    // stays quiet instead of guessing.
+    return { ok: false, configured: false, code: 'unreachable' }
   }
 }
 

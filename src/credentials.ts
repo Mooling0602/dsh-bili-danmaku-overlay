@@ -83,9 +83,33 @@ export interface CredentialStatus {
   readonly uname?: string
   /** Why the session was rejected, present only when `valid` is `no`. */
   readonly reason?: string
+  /**
+   * A stable name for the condition `reason` describes.
+   *
+   * The page needs to choose its own wording, and it cannot do that from a sentence:
+   * an upstream message is written for a developer reading a log, not for a reader
+   * deciding where to go next. The code is the contract between the two halves, so a
+   * later login method can reject a session for its own reason and the page can word
+   * an unhinted code by falling back to `reason` verbatim.
+   *
+   * Values are added, never renamed, because the page may be a version behind the
+   * Host that is serving it.
+   */
+  readonly code?: CredentialCode
   /** A local failure, such as a missing or unreadable credential file. */
   readonly error?: string
 }
+
+/**
+ * The conditions that can leave the stored session unusable.
+ *
+ * `expired` is the one a stored cookie reaches: Bilibili answers `-101` once the
+ * session stops being accepted. `missing` is a file that never held a token, which is
+ * a different instruction for the reader than a token that went stale. A method that
+ * is added later, such as a scanned login, names its own code here and the page picks
+ * up wording for it from the same dictionary.
+ */
+export type CredentialCode = 'expired' | 'missing' | 'unreadable' | 'no-csrf'
 
 /**
  * Extract one `refs.<name>` scalar with a line scan.
@@ -215,6 +239,10 @@ export async function credentialStatus(timeoutMs = 0): Promise<CredentialStatus>
       csrfRef: CSRF_REF,
       valid: 'no',
       error: error instanceof Error && error.message !== '' ? error.message : '未配置登录凭据',
+      // A file that exists but cannot be read is a different fix for the reader than
+      // one that was never written, so the two are kept apart rather than collapsed
+      // into a single "not configured".
+      code: error instanceof BiliError && error.code === 'no-credential' ? 'missing' : 'unreadable',
     }
   }
 
@@ -228,7 +256,8 @@ export async function credentialStatus(timeoutMs = 0): Promise<CredentialStatus>
     csrfRef: CSRF_REF,
     valid: 'unknown',
   }
-  if (!hasSess || timeoutMs <= 0) return base
+  if (!hasSess) return { ...base, valid: 'no', code: 'missing' }
+  if (timeoutMs <= 0) return base
 
   const session = await checkSession(cookie, timeoutMs)
   return { ...base, ...session }
@@ -248,7 +277,7 @@ export async function credentialStatus(timeoutMs = 0): Promise<CredentialStatus>
 async function checkSession(
   cookie: string,
   timeoutMs: number,
-): Promise<Pick<CredentialStatus, 'valid' | 'uname' | 'reason'>> {
+): Promise<Pick<CredentialStatus, 'valid' | 'uname' | 'reason' | 'code'>> {
   try {
     const response = await fetch('https://api.bilibili.com/x/web-interface/nav', {
       headers: {
@@ -272,7 +301,7 @@ async function checkSession(
       return uname === '' ? { valid: 'yes' } : { valid: 'yes', uname }
     }
     if (payload.code === -101) {
-      return { valid: 'no', reason: '登录态已过期，请更新凭据中的 session token' }
+      return { valid: 'no', code: 'expired', reason: '登录态已过期，请更新凭据中的 session token' }
     }
     return { valid: 'unknown' }
   } catch {

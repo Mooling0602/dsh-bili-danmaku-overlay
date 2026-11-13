@@ -144,6 +144,9 @@ export async function route(
       statsIntervalMs: readNumber(config?.statsIntervalMs, DEFAULT_STATS_INTERVAL_MS),
       defaultRoom: readField(config?.defaultRoom, ''),
       autoConnect: readField(config?.autoConnect, false),
+      // The page decides whether to check on load, so the flag travels with the
+      // other rendering settings rather than being baked into the bundle.
+      checkCredentialOnLoad: limits.checkCredentialOnLoad,
       // Identifies this Host process. A page keeps a temporary room title while
       // this value is unchanged and drops it when it differs, which is what makes
       // a rename last exactly one dsh run instead of accumulating forever.

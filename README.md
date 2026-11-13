@@ -60,6 +60,7 @@ Every option is editable on the plugin settings page and applies immediately.
 | `showEnterMessages` | `true` | Show "entered the room" notices |
 | `showSuperChat` | `true` | Show super chat messages |
 | `requestTimeoutMs` | `12000` | Request timeout |
+| `checkCredentialOnLoad` | `true` | Check the stored login on load and raise a notice when it is unusable |
 
 ## Front-end settings
 

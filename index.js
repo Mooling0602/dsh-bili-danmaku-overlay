@@ -30,7 +30,8 @@ var Config = Schema.object({
   heartbeatMs: Schema.natural().min(1e4).max(12e4).step(1e3).default(DEFAULT_HEARTBEAT_MS).volatile().description("Heartbeat interval for the upstream danmaku socket, in milliseconds.").i18n({ zh: "弹幕服务器心跳间隔（毫秒）。" }),
   showEnterMessages: Schema.boolean().default(true).volatile().description("Show “entered the room” notices in the overlay.").i18n({ zh: "在浮层显示“进入直播间”消息。" }),
   showSuperChat: Schema.boolean().default(true).volatile().description("Show super chat messages in the overlay.").i18n({ zh: "在浮层显示醒目留言。" }),
-  requestTimeoutMs: Schema.natural().min(3e3).max(6e4).step(1e3).default(DEFAULT_REQUEST_TIMEOUT_MS).volatile().description("Timeout for one Bilibili API request, in milliseconds.").i18n({ zh: "请求 Bilibili 接口的超时时间（毫秒）。" })
+  requestTimeoutMs: Schema.natural().min(3e3).max(6e4).step(1e3).default(DEFAULT_REQUEST_TIMEOUT_MS).volatile().description("Timeout for one Bilibili API request, in milliseconds.").i18n({ zh: "请求 Bilibili 接口的超时时间（毫秒）。" }),
+  checkCredentialOnLoad: Schema.boolean().default(true).volatile().description("Check the stored login when the page loads and raise a notice when it is unusable.").i18n({ zh: "自动检查登录凭据有效性。页面加载时检查，凭据不可用时弹窗说明。" })
 });
 function readField(field, fallback) {
   const value = field?.get();
@@ -48,7 +49,8 @@ function readLimits(config) {
     heartbeatMs: readNumber(config?.heartbeatMs, DEFAULT_HEARTBEAT_MS),
     requestTimeoutMs: readNumber(config?.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS),
     showEnterMessages: readField(config?.showEnterMessages, true),
-    showSuperChat: readField(config?.showSuperChat, true)
+    showSuperChat: readField(config?.showSuperChat, true),
+    checkCredentialOnLoad: readField(config?.checkCredentialOnLoad, true)
   };
 }
 
@@ -137,7 +139,11 @@ async function credentialStatus(timeoutMs = 0) {
       hasCsrf: false,
       csrfRef: CSRF_REF,
       valid: "no",
-      error: error instanceof Error && error.message !== "" ? error.message : "未配置登录凭据"
+      error: error instanceof Error && error.message !== "" ? error.message : "未配置登录凭据",
+      // A file that exists but cannot be read is a different fix for the reader than
+      // one that was never written, so the two are kept apart rather than collapsed
+      // into a single "not configured".
+      code: error instanceof BiliError && error.code === "no-credential" ? "missing" : "unreadable"
     };
   }
   const hasSess = cookieValue(cookie, "SESSDATA") !== "";
@@ -150,7 +156,8 @@ async function credentialStatus(timeoutMs = 0) {
     csrfRef: CSRF_REF,
     valid: "unknown"
   };
-  if (!hasSess || timeoutMs <= 0) return base;
+  if (!hasSess) return { ...base, valid: "no", code: "missing" };
+  if (timeoutMs <= 0) return base;
   const session = await checkSession(cookie, timeoutMs);
   return { ...base, ...session };
 }
@@ -171,7 +178,7 @@ async function checkSession(cookie, timeoutMs) {
       return uname === "" ? { valid: "yes" } : { valid: "yes", uname };
     }
     if (payload.code === -101) {
-      return { valid: "no", reason: "登录态已过期，请更新凭据中的 session token" };
+      return { valid: "no", code: "expired", reason: "登录态已过期，请更新凭据中的 session token" };
     }
     return { valid: "unknown" };
   } catch {
@@ -1142,6 +1149,9 @@ async function route(request, response, config) {
       statsIntervalMs: readNumber(config?.statsIntervalMs, DEFAULT_STATS_INTERVAL_MS),
       defaultRoom: readField(config?.defaultRoom, ""),
       autoConnect: readField(config?.autoConnect, false),
+      // The page decides whether to check on load, so the flag travels with the
+      // other rendering settings rather than being baked into the bundle.
+      checkCredentialOnLoad: limits.checkCredentialOnLoad,
       // Identifies this Host process. A page keeps a temporary room title while
       // this value is unchanged and drops it when it differs, which is what makes
       // a rename last exactly one dsh run instead of accumulating forever.

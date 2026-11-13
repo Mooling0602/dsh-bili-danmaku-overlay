@@ -126,7 +126,7 @@ window.__ModuleLoader__.load({
           const response = await fetch(`${BASE}/api/credential`);
           return await response.json();
         } catch {
-          return { ok: false, configured: false };
+          return { ok: false, configured: false, code: "unreachable" };
         }
       }
       async function fetchHistory(room) {
@@ -595,7 +595,8 @@ window.__ModuleLoader__.load({
       function CredentialRow({
         credential,
         ds,
-        t
+        t,
+        onPress
       }) {
         let label;
         let tone;
@@ -625,15 +626,25 @@ window.__ModuleLoader__.load({
           tone = "var(--dsw-alias-label-tertiary, #999)";
           detail = t("credentialUnknown");
         }
+        const pressable = credential !== null && (credential.code !== void 0 && credential.code !== "" || !credential.configured || credential.valid === "no" || credential.hasCsrf === false);
         return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
           "div",
           {
+            role: pressable ? "button" : void 0,
+            tabIndex: pressable ? 0 : void 0,
+            onClick: pressable ? onPress : void 0,
+            onKeyDown: pressable ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              onPress();
+            } : void 0,
             style: {
               display: "flex",
               alignItems: "center",
               gap: ds(6),
               padding: `${ds(7)}px ${ds(11)}px`,
-              borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
+              borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))",
+              cursor: pressable ? "pointer" : "default"
             },
             title: detail,
             children: [
@@ -1114,7 +1125,15 @@ window.__ModuleLoader__.load({
                         ))
                       ] }) : null
                     ] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CredentialRow, { credential: props.credential, ds, t: props.t }),
+                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                      CredentialRow,
+                      {
+                        credential: props.credential,
+                        ds,
+                        t: props.t,
+                        onPress: props.onCredentialClick
+                      }
+                    ),
                     /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
                       "div",
                       {
@@ -1848,6 +1867,20 @@ window.__ModuleLoader__.load({
         credentialValid: "有效",
         credentialUnknown: "无法验证",
         credentialNoCsrf: "缺少发言令牌",
+        credentialExpiredTitle: "登录凭据失效",
+        credentialExpiredBody: "您的哔哩哔哩账号登录态（dsh refs 凭据中配置的 BILIBILI_SESSDATA 或 BILIBILI_JCT）已过期，需要进行更新。你可以使用扫码登录重新授权，也可以手动更新凭据。",
+        credentialMissingTitle: "未配置登录凭据",
+        credentialMissingBody: "在 dsh refs 凭据中未找到 BILIBILI_SESSDATA，插件无法以您的账号发言或读取需要登录的内容。你可以使用扫码登录，也可以手动配置凭据。",
+        credentialUnreadableTitle: "无法读取登录凭据",
+        credentialUnreadableBody: "凭据文件存在，但其中的登录凭据无法读取，请检查 dsh refs 凭据的格式与访问权限。",
+        credentialNoCsrfTitle: "登录凭据缺少发言令牌",
+        credentialNoCsrfBody: "dsh refs 凭据中的 BILIBILI_JCT 缺失，登录态可用但无法发送弹幕，请补充后重试。",
+        credentialNoticeTitle: "登录凭据不可用",
+        credentialNoticeBody: "登录凭据当前不可用，详情见悬浮球菜单中的登录凭据一行。",
+        qrLogin: "扫码登录",
+        qrLoginPendingTitle: "扫码登录",
+        qrLoginPendingBody: "扫码登录功能尚未实现。",
+        confirm: "确认",
         hostNotReady: "插件后端未就绪，请重启 dsh 服务",
         sendFailed: "发送失败",
         refresh: "刷新弹幕",
@@ -1915,6 +1948,20 @@ window.__ModuleLoader__.load({
         credentialValid: "valid",
         credentialUnknown: "could not verify",
         credentialNoCsrf: "missing send token",
+        credentialExpiredTitle: "Login credential expired",
+        credentialExpiredBody: "The session for your Bilibili account (BILIBILI_SESSDATA or BILIBILI_JCT in the dsh refs credential) has expired and has to be renewed. Sign in with a QR code to authorise again, or update the credential by hand.",
+        credentialMissingTitle: "No login credential",
+        credentialMissingBody: "BILIBILI_SESSDATA is not present in the dsh refs credential, so the plugin cannot post as your account or read anything that needs a login. Sign in with a QR code, or configure the credential by hand.",
+        credentialUnreadableTitle: "Login credential cannot be read",
+        credentialUnreadableBody: "The credential file exists, but the login inside it cannot be read. Check the shape and the permissions of the dsh refs credential.",
+        credentialNoCsrfTitle: "Login credential has no posting token",
+        credentialNoCsrfBody: "BILIBILI_JCT is missing from the dsh refs credential. The session works, but nothing can be posted until it is added.",
+        credentialNoticeTitle: "Login credential is not usable",
+        credentialNoticeBody: "The login credential is not usable right now. The credential row in the ball menu says why.",
+        qrLogin: "Scan QR code",
+        qrLoginPendingTitle: "Scan QR code",
+        qrLoginPendingBody: "Scanning a QR code is not available yet.",
+        confirm: "OK",
         hostNotReady: "Plugin backend not ready, restart the dsh service",
         sendFailed: "Send failed",
         refresh: "Refresh danmaku",
@@ -1951,11 +1998,271 @@ window.__ModuleLoader__.load({
       };
 
       // src/client/overlay.tsx
-      var import_react4 = __require("react");
+      var import_react5 = __require("react");
 
-      // src/client/window.tsx
+      // src/client/dialog.tsx
       var import_react3 = __require("react");
       var import_jsx_runtime4 = __require("react/jsx-runtime");
+      function px(value, scale) {
+        return Math.max(1, Math.round(value * scale));
+      }
+      function Dialog(props) {
+        const { spec, onClose } = props;
+        const scale = props.uiScale / 100;
+        const sp = (value) => px(value, scale);
+        const surfaceRef = (0, import_react3.useRef)(null);
+        (0, import_react3.useEffect)(() => {
+          if (spec === null) return;
+          const onKey = (event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              onClose();
+              return;
+            }
+            if (event.key !== "Enter") return;
+            const actions2 = spec.actions ?? [];
+            const primary = actions2.find((action) => action.primary) ?? actions2.at(-1);
+            if (primary === void 0) {
+              onClose();
+              return;
+            }
+            event.preventDefault();
+            primary.onPress?.();
+            if (primary.replaces !== true) onClose();
+          };
+          document.addEventListener("keydown", onKey);
+          return () => document.removeEventListener("keydown", onKey);
+        }, [spec, onClose]);
+        (0, import_react3.useEffect)(() => {
+          if (spec === null) return;
+          surfaceRef.current?.focus();
+        }, [spec]);
+        const stop = (0, import_react3.useCallback)((event) => {
+          event.stopPropagation();
+        }, []);
+        if (spec === null) return null;
+        const actions = spec.actions ?? [];
+        const declared = actions.findIndex((action) => action.primary === true);
+        const primaryIndex = declared !== -1 ? declared : actions.length - 1;
+        return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+          "div",
+          {
+            style: {
+              position: "fixed",
+              inset: 0,
+              zIndex: 70,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              // The dim is a wash rather than a black overlay so the page stays legible
+              // enough to recognise, which is what tells the reader the notice belongs to
+              // the same application instead of a separate one.
+              background: "rgba(0,0,0,.42)",
+              padding: sp(24)
+            },
+            onClick: onClose,
+            children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+              "div",
+              {
+                ref: surfaceRef,
+                role: "dialog",
+                "aria-modal": "true",
+                "aria-label": spec.title,
+                tabIndex: -1,
+                onClick: stop,
+                style: {
+                  width: "100%",
+                  maxWidth: sp(360),
+                  display: "flex",
+                  flexDirection: "column",
+                  borderRadius: sp(12),
+                  border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))",
+                  background: "var(--dsw-alias-bg-layer-1, #fff)",
+                  color: "var(--dsw-alias-label-primary, #222)",
+                  boxShadow: "0 18px 48px rgba(0,0,0,.28)",
+                  font: `${sp(12)}px/${1.5} system-ui, -apple-system, sans-serif`,
+                  outline: "none",
+                  overflow: "hidden"
+                },
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+                    "div",
+                    {
+                      style: {
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: sp(8),
+                        padding: `${sp(12)}px ${sp(10)}px ${sp(6)}px ${sp(14)}px`
+                      },
+                      children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                          "span",
+                          {
+                            style: {
+                              flex: "1 1 auto",
+                              minWidth: 0,
+                              fontSize: sp(13),
+                              fontWeight: 600,
+                              // A long heading wraps rather than pushing the close button off the
+                              // card, which is why it is allowed to grow vertically here.
+                              overflowWrap: "anywhere"
+                            },
+                            children: spec.title
+                          }
+                        ),
+                        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                          "button",
+                          {
+                            type: "button",
+                            onClick: onClose,
+                            title: props.t("close"),
+                            "aria-label": props.t("close"),
+                            style: {
+                              flex: "0 0 auto",
+                              width: sp(22),
+                              height: sp(22),
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              padding: 0,
+                              marginTop: -sp(2),
+                              fontSize: sp(12),
+                              lineHeight: 1,
+                              borderRadius: sp(5),
+                              border: "1px solid transparent",
+                              background: "transparent",
+                              color: "var(--dsw-alias-label-tertiary, #999)",
+                              cursor: "pointer"
+                            },
+                            children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(CloseIcon, {})
+                          }
+                        )
+                      ]
+                    }
+                  ),
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    "p",
+                    {
+                      style: {
+                        margin: 0,
+                        padding: `0 ${sp(14)}px ${sp(14)}px`,
+                        fontSize: sp(12),
+                        color: "var(--dsw-alias-label-secondary, #666)",
+                        textAlign: "left",
+                        // The message carries room ids and file names, which have no spaces to
+                        // break at, so a long one has to wrap inside the word.
+                        overflowWrap: "anywhere",
+                        whiteSpace: "pre-wrap"
+                      },
+                      children: spec.message
+                    }
+                  ),
+                  /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    "div",
+                    {
+                      style: {
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        gap: sp(8),
+                        padding: `0 ${sp(14)}px ${sp(14)}px`
+                      },
+                      children: actions.map((action, index) => {
+                        const primary = index === primaryIndex;
+                        return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                          "button",
+                          {
+                            type: "button",
+                            onClick: () => {
+                              action.onPress?.();
+                              if (action.replaces !== true) onClose();
+                            },
+                            style: {
+                              minWidth: sp(64),
+                              padding: `${sp(6)}px ${sp(14)}px`,
+                              fontSize: sp(12),
+                              borderRadius: sp(7),
+                              // The primary action is filled and the rest are outlined, so the
+                              // row reads as one recommendation plus alternatives rather than as
+                              // a set of equal choices.
+                              border: primary ? "1px solid transparent" : "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                              background: primary ? "var(--dsw-alias-label-primary, #222)" : "transparent",
+                              color: primary ? "var(--dsw-alias-bg-layer-1, #fff)" : "var(--dsw-alias-label-secondary, #666)",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap"
+                            },
+                            children: action.label
+                          },
+                          `${action.label}-${index}`
+                        );
+                      })
+                    }
+                  )
+                ]
+              }
+            )
+          }
+        );
+      }
+
+      // src/client/notices.ts
+      var TITLES = {
+        expired: "credentialExpiredTitle",
+        missing: "credentialMissingTitle",
+        unreadable: "credentialUnreadableTitle",
+        "no-csrf": "credentialNoCsrfTitle"
+      };
+      var BODIES = {
+        expired: "credentialExpiredBody",
+        missing: "credentialMissingBody",
+        unreadable: "credentialUnreadableBody",
+        "no-csrf": "credentialNoCsrfBody"
+      };
+      function problemCode(credential) {
+        if (credential.code === "unreachable") return null;
+        if (credential.code !== void 0 && credential.code !== "") return credential.code;
+        if (!credential.configured) return "missing";
+        if (credential.valid === "no") return "expired";
+        if (credential.hasCsrf === false) return "no-csrf";
+        return null;
+      }
+      function bodyText(credential, bodyKey, t) {
+        const detail = credential.reason ?? credential.error ?? "";
+        if (bodyKey === void 0) return detail === "" ? t("credentialNoticeBody") : detail;
+        const body = t(bodyKey);
+        const namesWhatIsAbsent = credential.code === "missing" && detail !== "";
+        return namesWhatIsAbsent ? `${body}
+    ${detail}` : body;
+      }
+      function credentialNotice(input) {
+        const { credential, t } = input;
+        if (credential === null) return null;
+        const code = problemCode(credential);
+        if (code === null) return null;
+        const titleKey = TITLES[code];
+        const bodyKey = BODIES[code];
+        return {
+          title: titleKey === void 0 ? t("credentialNoticeTitle") : t(titleKey),
+          // The dictionary words the condition, because it knows how to say what to do next.
+          // The Host's own sentence is added when it carries a detail the dictionary cannot
+          // know, such as which ref is absent, and is the whole message for a code this build
+          // has never heard of.
+          message: bodyText(credential, bodyKey, t),
+          actions: [
+            {
+              label: t("qrLogin"),
+              // The sign-in flow replaces this notice with its own, so the layer stands
+              // aside instead of closing a notice the callback has already swapped.
+              replaces: true,
+              onPress: input.onQrLogin
+            },
+            { label: t("confirm"), primary: true }
+          ]
+        };
+      }
+
+      // src/client/window.tsx
+      var import_react4 = __require("react");
+      var import_jsx_runtime5 = __require("react/jsx-runtime");
       var IDLE_FADE_MS2 = 5e3;
       var MINIMIZED_STEP = 42;
       var MAX_TITLE = 40;
@@ -1970,12 +2277,12 @@ window.__ModuleLoader__.load({
       var MIN_SUMMARY_CHARS = 48;
       var MAX_NAME_CHARS = 8;
       var MAX_NAME_FRACTION = "40%";
-      function px(value, scale) {
+      function px2(value, scale) {
         return Math.max(1, Math.round(value * scale));
       }
       function Row(props) {
         const { item } = props;
-        const sp = (value) => px(value, props.scale);
+        const sp = (value) => px2(value, props.scale);
         const color = item.kind === "enter" ? null : colorOf(item.color);
         const longName = [...item.user].length > MAX_NAME_CHARS;
         const lineHeight = `${sp(15)}px`;
@@ -1983,8 +2290,8 @@ window.__ModuleLoader__.load({
           // A wrapped message makes the row taller than its badges, and a flex row
           // stretches every other child to that height by default, which drags a badge
           // border down the whole row. Aligning to the top keeps each chip its own size.
-          /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: sp(6), padding: `${sp(2)}px 0` }, children: [
-            item.medal ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: sp(6), padding: `${sp(2)}px 0` }, children: [
+            item.medal ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
               "span",
               {
                 style: {
@@ -2007,7 +2314,7 @@ window.__ModuleLoader__.load({
                 ]
               }
             ) : null,
-            item.kind === "superchat" && item.price ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+            item.kind === "superchat" && item.price ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
               "span",
               {
                 style: {
@@ -2025,7 +2332,7 @@ window.__ModuleLoader__.load({
                 ]
               }
             ) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
               "span",
               {
                 style: {
@@ -2050,7 +2357,7 @@ window.__ModuleLoader__.load({
                 ]
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
               "span",
               {
                 style: {
@@ -2086,29 +2393,29 @@ window.__ModuleLoader__.load({
       }
       function DanmakuWindow(props) {
         const { t, instance } = props;
-        const [reply, setReply] = (0, import_react3.useState)("");
-        const [replyState, setReplyState] = (0, import_react3.useState)("idle");
-        const [editing, setEditing] = (0, import_react3.useState)(false);
-        const [titleDraft, setTitleDraft] = (0, import_react3.useState)(instance.alias);
-        const [idle, setIdle] = (0, import_react3.useState)(false);
-        const listRef = (0, import_react3.useRef)(null);
-        const cardRef = (0, import_react3.useRef)(null);
-        const dragRef = (0, import_react3.useRef)(null);
-        const [dragging, setDragging] = (0, import_react3.useState)(null);
-        const latestRef = (0, import_react3.useRef)(null);
-        const dragOriginRef = (0, import_react3.useRef)(null);
-        const draggedRef = (0, import_react3.useRef)(false);
-        const pressTargetRef = (0, import_react3.useRef)(null);
-        const lastTitlePressRef = (0, import_react3.useRef)(0);
-        const idleTimer = (0, import_react3.useRef)(0);
-        const [resizing, setResizing] = (0, import_react3.useState)(null);
-        const resizeStartRef = (0, import_react3.useRef)(null);
-        const [showOffline, setShowOffline] = (0, import_react3.useState)(false);
+        const [reply, setReply] = (0, import_react4.useState)("");
+        const [replyState, setReplyState] = (0, import_react4.useState)("idle");
+        const [editing, setEditing] = (0, import_react4.useState)(false);
+        const [titleDraft, setTitleDraft] = (0, import_react4.useState)(instance.alias);
+        const [idle, setIdle] = (0, import_react4.useState)(false);
+        const listRef = (0, import_react4.useRef)(null);
+        const cardRef = (0, import_react4.useRef)(null);
+        const dragRef = (0, import_react4.useRef)(null);
+        const [dragging, setDragging] = (0, import_react4.useState)(null);
+        const latestRef = (0, import_react4.useRef)(null);
+        const dragOriginRef = (0, import_react4.useRef)(null);
+        const draggedRef = (0, import_react4.useRef)(false);
+        const pressTargetRef = (0, import_react4.useRef)(null);
+        const lastTitlePressRef = (0, import_react4.useRef)(0);
+        const idleTimer = (0, import_react4.useRef)(0);
+        const [resizing, setResizing] = (0, import_react4.useState)(null);
+        const resizeStartRef = (0, import_react4.useRef)(null);
+        const [showOffline, setShowOffline] = (0, import_react4.useState)(false);
         const minimized = instance.view === "minimized";
         const newest = instance.items[instance.items.length - 1];
         const offline = instance.state === "offline";
         const veiled = offline && !showOffline;
-        (0, import_react3.useEffect)(() => {
+        (0, import_react4.useEffect)(() => {
           window.clearTimeout(idleTimer.current);
           if (!minimized) {
             setIdle(false);
@@ -2118,17 +2425,17 @@ window.__ModuleLoader__.load({
           idleTimer.current = window.setTimeout(() => setIdle(true), IDLE_FADE_MS2);
           return () => window.clearTimeout(idleTimer.current);
         }, [minimized, instance.lastAt]);
-        (0, import_react3.useEffect)(() => {
+        (0, import_react4.useEffect)(() => {
           const node = listRef.current;
           if (!node || !props.follow) return;
           node.scrollTop = node.scrollHeight;
         }, [instance.items, minimized, props.follow]);
-        const onScroll = (0, import_react3.useCallback)(() => {
+        const onScroll = (0, import_react4.useCallback)(() => {
           const node = listRef.current;
           if (!node) return;
           props.onScrolled(node.scrollHeight - node.scrollTop - node.clientHeight < 48);
         }, [props]);
-        const onPointerDown = (0, import_react3.useCallback)((event) => {
+        const onPointerDown = (0, import_react4.useCallback)((event) => {
           if (event.target.closest("[data-no-drag]")) return;
           const rect = cardRef.current?.getBoundingClientRect();
           if (!rect) return;
@@ -2138,7 +2445,7 @@ window.__ModuleLoader__.load({
           pressTargetRef.current = event.target;
           event.currentTarget.setPointerCapture?.(event.pointerId);
         }, []);
-        const onPointerMove = (0, import_react3.useCallback)((event) => {
+        const onPointerMove = (0, import_react4.useCallback)((event) => {
           if (!dragRef.current) return;
           const node = cardRef.current;
           if (!node) return;
@@ -2154,7 +2461,7 @@ window.__ModuleLoader__.load({
           latestRef.current = { x, y };
           setDragging({ x, y });
         }, []);
-        const onPointerUp = (0, import_react3.useCallback)((event) => {
+        const onPointerUp = (0, import_react4.useCallback)((event) => {
           if (!dragRef.current) return;
           dragRef.current = null;
           dragOriginRef.current = null;
@@ -2180,7 +2487,7 @@ window.__ModuleLoader__.load({
             lastTitlePressRef.current = 0;
           }
         }, [props, instance.alias]);
-        const onResizeDown = (0, import_react3.useCallback)(
+        const onResizeDown = (0, import_react4.useCallback)(
           (edge) => (event) => {
             event.stopPropagation();
             const rect = cardRef.current?.getBoundingClientRect();
@@ -2200,7 +2507,7 @@ window.__ModuleLoader__.load({
           },
           [props.width, props.height]
         );
-        const onResizeMove = (0, import_react3.useCallback)((event) => {
+        const onResizeMove = (0, import_react4.useCallback)((event) => {
           const start = resizeStartRef.current;
           if (!start) return;
           const sideways = start.edge !== "none";
@@ -2229,7 +2536,7 @@ window.__ModuleLoader__.load({
             left: start.edge !== "left" ? null : start.left + start.width - width
           });
         }, []);
-        const onResizeUp = (0, import_react3.useCallback)(
+        const onResizeUp = (0, import_react4.useCallback)(
           (event) => {
             const start = resizeStartRef.current;
             if (!start) return;
@@ -2246,7 +2553,7 @@ window.__ModuleLoader__.load({
           },
           [props, resizing, instance.place]
         );
-        const submit = (0, import_react3.useCallback)(async () => {
+        const submit = (0, import_react4.useCallback)(async () => {
           const text = reply.trim();
           if (text === "" || replyState === "sending") return;
           setReplyState("sending");
@@ -2264,14 +2571,14 @@ window.__ModuleLoader__.load({
         const showPreview = minimized && !idle && newest !== void 0;
         const settled = dragging ?? instance.place;
         const scale = props.uiScale / 100;
-        const sp = (value) => px(value, scale);
+        const sp = (value) => px2(value, scale);
         const icon = iconOf(scale);
         const live = resizing === null ? { width: props.width, height: props.height } : { width: resizing.width, height: resizing.height };
         const box = cardRef.current === null ? null : { left: cardRef.current.getBoundingClientRect().left, top: cardRef.current.getBoundingClientRect().top };
         const leftwards = resizeStartRef.current === null ? box !== null && box.left + live.width > window.innerWidth - EDGE_MARGIN * 2 : resizeStartRef.current.edge === "left";
         const base = settled !== null ? { left: settled.x, top: settled.y } : minimized ? { right: 18, bottom: 18 + 34 + props.ballSize + props.slot * sp(MINIMIZED_STEP) } : { right: 18, bottom: 18 + 34 + props.ballSize };
         const position = resizing === null || resizing.left === null ? base : { ...base, left: resizing.left };
-        return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+        return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
           "div",
           {
             ref: cardRef,
@@ -2296,7 +2603,7 @@ window.__ModuleLoader__.load({
               overflow: "hidden"
             },
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+              /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
                 "div",
                 {
                   onPointerDown,
@@ -2316,7 +2623,7 @@ window.__ModuleLoader__.load({
                     touchAction: "none"
                   },
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "span",
                       {
                         title: stateTitle(t, instance.state, veiled),
@@ -2330,7 +2637,7 @@ window.__ModuleLoader__.load({
                         }
                       }
                     ),
-                    editing ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    editing ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "input",
                       {
                         autoFocus: true,
@@ -2366,7 +2673,7 @@ window.__ModuleLoader__.load({
                           outline: "none"
                         }
                       }
-                    ) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    ) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "span",
                       {
                         "data-rename": true,
@@ -2387,7 +2694,7 @@ window.__ModuleLoader__.load({
                         children: showPreview ? newestLine : windowLabel(instance)
                       }
                     ),
-                    instance.online > 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    instance.online > 0 ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "span",
                       {
                         title: t("online"),
@@ -2400,7 +2707,7 @@ window.__ModuleLoader__.load({
                         children: instance.online
                       }
                     ) : null,
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "button",
                       {
                         type: "button",
@@ -2408,10 +2715,10 @@ window.__ModuleLoader__.load({
                         onClick: props.onRefresh,
                         title: t("refresh"),
                         style: icon,
-                        children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(RefreshIcon, {})
+                        children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(RefreshIcon, {})
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "button",
                       {
                         type: "button",
@@ -2419,10 +2726,10 @@ window.__ModuleLoader__.load({
                         onClick: minimized ? props.onRestore : props.onMinimize,
                         title: minimized ? t("expand") : t("minimizeWindow"),
                         style: icon,
-                        children: minimized ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(RestoreIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MinimizeIcon, {})
+                        children: minimized ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(RestoreIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(MinimizeIcon, {})
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "button",
                       {
                         type: "button",
@@ -2430,13 +2737,13 @@ window.__ModuleLoader__.load({
                         onClick: props.onClose,
                         title: t("hideWindow"),
                         style: icon,
-                        children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(CloseIcon, {})
+                        children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(CloseIcon, {})
                       }
                     )
                   ]
                 }
               ),
-              minimized ? null : veiled ? /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+              minimized ? null : veiled ? /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
                 "div",
                 {
                   style: {
@@ -2451,8 +2758,8 @@ window.__ModuleLoader__.load({
                     color: "var(--dsw-alias-label-secondary, #888)"
                   },
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: t("offlineHint") }),
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { children: t("offlineHint") }),
+                    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "button",
                       {
                         type: "button",
@@ -2473,7 +2780,7 @@ window.__ModuleLoader__.load({
                     )
                   ]
                 }
-              ) : /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+              ) : /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                 "div",
                 {
                   ref: listRef,
@@ -2488,7 +2795,7 @@ window.__ModuleLoader__.load({
                     overflowY: "auto",
                     padding: `${sp(6)}px ${sp(10)}px`
                   },
-                  children: instance.items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                  children: instance.items.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                     "div",
                     {
                       style: {
@@ -2499,10 +2806,10 @@ window.__ModuleLoader__.load({
                       },
                       children: instance.notice !== "" ? instance.notice : t("empty")
                     }
-                  ) : instance.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Row, { item, superChatLabel: t("superchat"), scale }, item.id))
+                  ) : instance.items.map((item) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Row, { item, superChatLabel: t("superchat"), scale }, item.id))
                 }
               ),
-              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(
                 "div",
                 {
                   "data-no-drag": true,
@@ -2513,7 +2820,7 @@ window.__ModuleLoader__.load({
                     borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
                   },
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "input",
                       {
                         value: reply,
@@ -2538,7 +2845,7 @@ window.__ModuleLoader__.load({
                         }
                       }
                     ),
-                    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                       "button",
                       {
                         type: "button",
@@ -2560,8 +2867,8 @@ window.__ModuleLoader__.load({
                   ]
                 }
               ),
-              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+              minimized ? null : /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                   "div",
                   {
                     onPointerDown: onResizeDown("left"),
@@ -2572,7 +2879,7 @@ window.__ModuleLoader__.load({
                     style: { position: "absolute", left: 0, top: 0, bottom: 0, width: sp(6), cursor: "ew-resize", touchAction: "none" }
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                   "div",
                   {
                     onPointerDown: onResizeDown("right"),
@@ -2583,7 +2890,7 @@ window.__ModuleLoader__.load({
                     style: { position: "absolute", right: 0, top: 0, bottom: 0, width: sp(6), cursor: "ew-resize", touchAction: "none" }
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                   "div",
                   {
                     onPointerDown: onResizeDown("bottom"),
@@ -2594,7 +2901,7 @@ window.__ModuleLoader__.load({
                     style: { position: "absolute", left: sp(6), right: sp(6), bottom: 0, height: sp(6), cursor: "ns-resize", touchAction: "none" }
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                   "div",
                   {
                     onPointerDown: onResizeDown("bottom-left"),
@@ -2614,7 +2921,7 @@ window.__ModuleLoader__.load({
                     }
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
                   "div",
                   {
                     onPointerDown: onResizeDown("bottom-right"),
@@ -2644,7 +2951,7 @@ window.__ModuleLoader__.load({
         return flat.length <= max ? flat : `${flat.slice(0, max)}…`;
       }
       var iconOf = (scale) => {
-        const sp = (value) => px(value, scale);
+        const sp = (value) => px2(value, scale);
         return {
           // A card narrower than its scaled chrome is possible, because the two settings
           // are independent: a 240px window at 300% cannot fit three buttons at their
@@ -2674,7 +2981,7 @@ window.__ModuleLoader__.load({
       };
 
       // src/client/overlay.tsx
-      var import_jsx_runtime5 = __require("react/jsx-runtime");
+      var import_jsx_runtime6 = __require("react/jsx-runtime");
       var BOOT_POLL_MS = 3e4;
       function asView(view) {
         if (view === "hidden" || view === "minimized" || view === "window") return view;
@@ -2729,16 +3036,25 @@ window.__ModuleLoader__.load({
       }
       function Overlay(props) {
         const { t } = props;
-        const saved = (0, import_react4.useRef)(loadState()).current;
-        const [config, setConfig] = (0, import_react4.useState)({
+        const saved = (0, import_react5.useRef)(loadState()).current;
+        const [config, setConfig] = (0, import_react5.useState)({
           historyLimit: 200,
           statsIntervalMs: 6e4,
           defaultRoom: "",
-          autoConnect: false
+          autoConnect: false,
+          checkCredentialOnLoad: true
         });
-        const [credential, setCredential] = (0, import_react4.useState)(null);
-        const [front, setFront] = (0, import_react4.useState)(() => readFront(saved));
-        (0, import_react4.useEffect)(
+        const [credential, setCredential] = (0, import_react5.useState)(null);
+        const [notice, setNotice] = (0, import_react5.useState)(null);
+        const openQrLogin = (0, import_react5.useCallback)(() => {
+          setNotice({
+            title: t("qrLoginPendingTitle"),
+            message: t("qrLoginPendingBody"),
+            actions: [{ label: t("confirm"), primary: true }]
+          });
+        }, [t]);
+        const [front, setFront] = (0, import_react5.useState)(() => readFront(saved));
+        (0, import_react5.useEffect)(
           () => onStateChange(() => {
             const stored = loadState();
             const next = readFront(stored);
@@ -2754,26 +3070,26 @@ window.__ModuleLoader__.load({
         );
         const ballSize = front.ballSize;
         const windowSize = { width: front.width, height: front.height };
-        const [menuBox, setMenuBox] = (0, import_react4.useState)(null);
-        const [ballPlace, setBallPlace] = (0, import_react4.useState)(
+        const [menuBox, setMenuBox] = (0, import_react5.useState)(null);
+        const [ballPlace, setBallPlace] = (0, import_react5.useState)(
           saved.ballPlace ?? null
         );
-        const [recent, setRecent] = (0, import_react4.useState)(() => loadRecent(saved));
-        const [menuOpen, setMenuOpen] = (0, import_react4.useState)(false);
-        const configRef = (0, import_react4.useRef)(config);
-        const stores = (0, import_react4.useRef)(/* @__PURE__ */ new Map());
-        const [order, setOrder] = (0, import_react4.useState)([]);
-        const restored = (0, import_react4.useRef)(false);
-        const bootSeen = (0, import_react4.useRef)(String(saved.host ?? ""));
-        const placeRef = (0, import_react4.useRef)(saved.ballPlace ?? null);
-        const adoptBoot = (0, import_react4.useCallback)((boot) => {
+        const [recent, setRecent] = (0, import_react5.useState)(() => loadRecent(saved));
+        const [menuOpen, setMenuOpen] = (0, import_react5.useState)(false);
+        const configRef = (0, import_react5.useRef)(config);
+        const stores = (0, import_react5.useRef)(/* @__PURE__ */ new Map());
+        const [order, setOrder] = (0, import_react5.useState)([]);
+        const restored = (0, import_react5.useRef)(false);
+        const bootSeen = (0, import_react5.useRef)(String(saved.host ?? ""));
+        const placeRef = (0, import_react5.useRef)(saved.ballPlace ?? null);
+        const adoptBoot = (0, import_react5.useCallback)((boot) => {
           if (bootSeen.current === boot) return;
           const first = bootSeen.current === "";
           bootSeen.current = boot;
           if (first) return;
           for (const store of stores.current.values()) store.setAlias("");
         }, []);
-        (0, import_react4.useEffect)(() => {
+        (0, import_react5.useEffect)(() => {
           let disposed = false;
           void fetchConfig().then((next) => {
             if (disposed) return;
@@ -2784,19 +3100,23 @@ window.__ModuleLoader__.load({
             disposed = true;
           };
         }, [adoptBoot]);
-        const refreshCredential = (0, import_react4.useCallback)(() => {
+        const refreshCredential = (0, import_react5.useCallback)(() => {
           void fetchCredential().then((next) => setCredential(next));
         }, []);
-        (0, import_react4.useEffect)(() => {
+        (0, import_react5.useEffect)(() => {
+          if (config.checkCredentialOnLoad !== true) return;
           let disposed = false;
           void fetchCredential().then((next) => {
-            if (!disposed) setCredential(next);
+            if (disposed) return;
+            setCredential(next);
+            const spec = credentialNotice({ credential: next, t, onQrLogin: openQrLogin });
+            if (spec !== null) setNotice(spec);
           });
           return () => {
             disposed = true;
           };
-        }, []);
-        const createRoom = (0, import_react4.useCallback)(
+        }, [config.checkCredentialOnLoad, t]);
+        const createRoom = (0, import_react5.useCallback)(
           (room, initial) => {
             for (const existing of stores.current.values()) {
               if (existing.getSnapshot().room === room) return null;
@@ -2808,7 +3128,7 @@ window.__ModuleLoader__.load({
           },
           []
         );
-        (0, import_react4.useEffect)(() => {
+        (0, import_react5.useEffect)(() => {
           if (restored.current) return;
           if (config.defaultRoom === "" && config.autoConnect === false) return;
           restored.current = true;
@@ -2817,7 +3137,7 @@ window.__ModuleLoader__.load({
           if (!store) return;
           setOrder((current) => [...current, store.getSnapshot().key]);
         }, [config, createRoom]);
-        (0, import_react4.useEffect)(() => {
+        (0, import_react5.useEffect)(() => {
           const check = async () => {
             const next = await fetchConfig();
             if (next.boot !== void 0) adoptBoot(next.boot);
@@ -2825,7 +3145,7 @@ window.__ModuleLoader__.load({
           const timer = window.setInterval(() => void check(), BOOT_POLL_MS);
           return () => window.clearInterval(timer);
         }, []);
-        const persist = (0, import_react4.useCallback)((nextOrder, nextSize) => {
+        const persist = (0, import_react5.useCallback)((nextOrder, nextSize) => {
           const rooms = [];
           for (const key of nextOrder) {
             const store = stores.current.get(key);
@@ -2857,14 +3177,14 @@ window.__ModuleLoader__.load({
             host: bootSeen.current
           });
         }, []);
-        const forgetRoom = (0, import_react4.useCallback)((room) => {
+        const forgetRoom = (0, import_react5.useCallback)((room) => {
           const saved2 = loadState();
           const next = (saved2.recentRooms ?? []).filter((entry) => entry.room !== room);
           saveState({ ...saved2, recentRooms: next });
           setRecent((previous) => previous.filter((entry) => entry.room !== room));
         }, []);
-        const cache = (0, import_react4.useRef)([]);
-        const joinRooms = (0, import_react4.useCallback)(() => {
+        const cache = (0, import_react5.useRef)([]);
+        const joinRooms = (0, import_react5.useCallback)(() => {
           const next = [];
           for (const key of order) {
             const store = stores.current.get(key);
@@ -2876,8 +3196,8 @@ window.__ModuleLoader__.load({
           cache.current = next;
           return next;
         }, [order]);
-        const instances = (0, import_react4.useSyncExternalStore)(
-          (0, import_react4.useCallback)(
+        const instances = (0, import_react5.useSyncExternalStore)(
+          (0, import_react5.useCallback)(
             (listener) => {
               const unsubscribes = [];
               for (const key of order) {
@@ -2894,10 +3214,10 @@ window.__ModuleLoader__.load({
           joinRooms
         );
         const titleSignature = instances.map((room) => `${room.room}\0${room.liveTitle}\0${room.uname}`).join("");
-        (0, import_react4.useEffect)(() => {
+        (0, import_react5.useEffect)(() => {
           persist(order, ballSize);
         }, [titleSignature, order, ballSize, persist]);
-        const addRoom = (0, import_react4.useCallback)(
+        const addRoom = (0, import_react5.useCallback)(
           (room) => {
             const value = room.trim();
             if (value === "") return;
@@ -2911,7 +3231,7 @@ window.__ModuleLoader__.load({
           },
           [createRoom, persist, ballSize]
         );
-        const removeRoom = (0, import_react4.useCallback)(
+        const removeRoom = (0, import_react5.useCallback)(
           (key) => {
             const store = stores.current.get(key);
             if (store) {
@@ -2926,7 +3246,7 @@ window.__ModuleLoader__.load({
           },
           [persist, ballSize]
         );
-        const setView = (0, import_react4.useCallback)(
+        const setView = (0, import_react5.useCallback)(
           (key, view) => {
             const store = stores.current.get(key);
             if (!store) return;
@@ -2935,7 +3255,7 @@ window.__ModuleLoader__.load({
           },
           [order, persist, ballSize]
         );
-        const renameRoom = (0, import_react4.useCallback)(
+        const renameRoom = (0, import_react5.useCallback)(
           (key, alias) => {
             const store = stores.current.get(key);
             if (!store) return;
@@ -2944,7 +3264,7 @@ window.__ModuleLoader__.load({
           },
           [order, persist, ballSize]
         );
-        const dragRoom = (0, import_react4.useCallback)(
+        const dragRoom = (0, import_react5.useCallback)(
           (key, place) => {
             const store = stores.current.get(key);
             if (!store) return;
@@ -2953,15 +3273,15 @@ window.__ModuleLoader__.load({
           },
           [order, persist, ballSize]
         );
-        const showAll = (0, import_react4.useCallback)(() => {
+        const showAll = (0, import_react5.useCallback)(() => {
           for (const key of order) stores.current.get(key)?.setView("window");
           persist(order, ballSize);
         }, [order, persist, ballSize]);
-        const hideAll = (0, import_react4.useCallback)(() => {
+        const hideAll = (0, import_react5.useCallback)(() => {
           for (const key of order) stores.current.get(key)?.setView("hidden");
           persist(order, ballSize);
         }, [order, persist, ballSize]);
-        const refreshRoom = (0, import_react4.useCallback)((key) => {
+        const refreshRoom = (0, import_react5.useCallback)((key) => {
           const store = stores.current.get(key);
           if (!store) return;
           store.disconnect();
@@ -2969,7 +3289,7 @@ window.__ModuleLoader__.load({
         }, []);
         const canReply = Boolean(credential?.configured && credential.hasCsrf);
         const replyReason = !credential ? "" : credential.ok === false ? t("hostNotReady") : !credential.configured ? credential.error ?? t("noCredential") : !credential.hasCsrf ? t("credentialHint") : "";
-        const sendTo = (0, import_react4.useCallback)(
+        const sendTo = (0, import_react5.useCallback)(
           async (room, text) => {
             const result = await sendReply(room, text);
             if (!result.ok) return result;
@@ -3000,8 +3320,8 @@ window.__ModuleLoader__.load({
             live: false
           });
         }
-        return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)(import_jsx_runtime5.Fragment, { children: [
-          instances.filter((instance) => instance.view !== "hidden").map((instance) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)(import_jsx_runtime6.Fragment, { children: [
+          instances.filter((instance) => instance.view !== "hidden").map((instance) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
             DanmakuWindow,
             {
               t,
@@ -3031,7 +3351,7 @@ window.__ModuleLoader__.load({
             },
             instance.key
           )),
-          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
             FloatingBall,
             {
               t,
@@ -3063,7 +3383,20 @@ window.__ModuleLoader__.load({
                 placeRef.current = place;
                 setBallPlace(place);
                 persist(order, ballSize);
+              },
+              onCredentialClick: () => {
+                const spec = credentialNotice({ credential, t, onQrLogin: openQrLogin });
+                if (spec !== null) setNotice(spec);
               }
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+            Dialog,
+            {
+              spec: notice,
+              onClose: () => setNotice(null),
+              uiScale: front.uiScale,
+              t
             }
           )
         ] });

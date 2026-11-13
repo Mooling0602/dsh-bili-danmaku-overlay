@@ -83,6 +83,14 @@ export interface Config {
   showSuperChat: Volatile<boolean>
   /** Request timeout for outbound Bilibili calls, in milliseconds. */
   requestTimeoutMs: Volatile<number>
+  /**
+   * Whether a stale login raises a notice as soon as the page loads.
+   *
+   * The check itself is a real upstream call, so a reader on a metered connection
+   * or one who opens dsh for something unrelated may want it to stop happening on
+   * its own. The credential row still reports the verdict when asked.
+   */
+  checkCredentialOnLoad: Volatile<boolean>
 }
 
 /**
@@ -161,6 +169,11 @@ export const Config = Schema.object({
     .volatile()
     .description('Timeout for one Bilibili API request, in milliseconds.')
     .i18n({ zh: '请求 Bilibili 接口的超时时间（毫秒）。' }),
+  checkCredentialOnLoad: Schema.boolean()
+    .default(true)
+    .volatile()
+    .description('Check the stored login when the page loads and raise a notice when it is unusable.')
+    .i18n({ zh: '自动检查登录凭据有效性。页面加载时检查，凭据不可用时弹窗说明。' }),
 })
 
 /**
@@ -212,6 +225,13 @@ export interface Limits {
   readonly showEnterMessages: boolean
   /** Whether super chat messages are rendered. */
   readonly showSuperChat: boolean
+  /**
+   * Whether the page checks the stored login when it loads.
+   *
+   * Turning this off leaves the credential row in the ball menu working on demand,
+   * so a reader who does not want a notice on every load still has a way to ask.
+   */
+  readonly checkCredentialOnLoad: boolean
 }
 
 /**
@@ -229,5 +249,6 @@ export function readLimits(config: Partial<Config> | undefined): Limits {
     requestTimeoutMs: readNumber(config?.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS),
     showEnterMessages: readField(config?.showEnterMessages, true),
     showSuperChat: readField(config?.showSuperChat, true),
+    checkCredentialOnLoad: readField(config?.checkCredentialOnLoad, true),
   }
 }

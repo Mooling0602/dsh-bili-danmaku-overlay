@@ -156,6 +156,15 @@ export interface BallProps {
   readonly menuBox: MenuBox | null
   /** Called when a resize gesture ends, with the size it reached. */
   readonly onMenuResize: (size: MenuBox) => void
+  /**
+   * Called when the credential row is pressed.
+   *
+   * The row is the whole report, and a row that names a problem without saying what
+   * to do about it leaves the reader with nowhere to go. It is pressable only when
+   * there is something to explain, so a healthy credential stays inert rather than
+   * opening a notice that has nothing to say.
+   */
+  readonly onCredentialClick: () => void
 }
 
 /**
@@ -249,10 +258,12 @@ function CredentialRow({
   credential,
   ds,
   t,
+  onPress,
 }: {
   readonly credential: Credential | null
   readonly ds: (value: number) => number
   readonly t: (key: CopyKey) => string
+  readonly onPress: () => void
 }): React.ReactElement {
   let label: string
   let tone: string
@@ -284,14 +295,37 @@ function CredentialRow({
     detail = t('credentialUnknown')
   }
 
+  // A healthy or unverified credential has nothing to explain, so it stays inert.
+  // Pressability tracks the conditions the notice can word, not the tone: an
+  // unverified token is neutral but still not the reader's to fix.
+  const pressable =
+    credential !== null &&
+    ((credential.code !== undefined && credential.code !== '') ||
+      !credential.configured ||
+      credential.valid === 'no' ||
+      credential.hasCsrf === false)
+
   return (
     <div
+      role={pressable ? 'button' : undefined}
+      tabIndex={pressable ? 0 : undefined}
+      onClick={pressable ? onPress : undefined}
+      onKeyDown={
+        pressable
+          ? (event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return
+              event.preventDefault()
+              onPress()
+            }
+          : undefined
+      }
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: ds(6),
         padding: `${ds(7)}px ${ds(11)}px`,
         borderTop: '1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))',
+        cursor: pressable ? 'pointer' : 'default',
       }}
       title={detail}
     >
@@ -926,7 +960,12 @@ export function FloatingBall(props: BallProps) {
             ) : null}
           </div>
 
-          <CredentialRow credential={props.credential} ds={ds} t={props.t} />
+          <CredentialRow
+            credential={props.credential}
+            ds={ds}
+            t={props.t}
+            onPress={props.onCredentialClick}
+          />
 
           <div
             style={{

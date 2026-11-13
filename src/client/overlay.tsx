@@ -57,6 +57,8 @@ import {
   type MenuBox,
   type RoomCandidate,
 } from './ball.tsx'
+import { Dialog, type DialogSpec } from './dialog.tsx'
+import { credentialNotice } from './notices.ts'
 import { RoomStore, type RoomInstance, type RoomView } from './rooms.ts'
 import { DanmakuWindow } from './window.tsx'
 
@@ -172,8 +174,34 @@ export function Overlay(props: OverlayProps) {
     statsIntervalMs: 60_000,
     defaultRoom: '',
     autoConnect: false,
+    checkCredentialOnLoad: true,
   })
   const [credential, setCredential] = useState<Credential | null>(null)
+  /**
+   * The notice currently raised over the page, or null when none is.
+   *
+   * A notice is raised by an action rather than by the credential's state alone.
+   * Dimming the page the moment a session is found stale would interrupt a reader
+   * who opened dsh to do something unrelated, so the menu row is what asks for the
+   * explanation, and this holds the answer while it is open.
+   */
+  const [notice, setNotice] = useState<DialogSpec | null>(null)
+
+  /**
+   * Answer the QR sign-in button until the flow itself exists.
+   *
+   * The button is reserved before the flow is built so the notice does not have to
+   * change shape twice. It says plainly that nothing is behind it yet, because a
+   * button that silently did nothing would read as a broken plugin rather than an
+   * unfinished one.
+   */
+  const openQrLogin = useCallback((): void => {
+    setNotice({
+      title: t('qrLoginPendingTitle'),
+      message: t('qrLoginPendingBody'),
+      actions: [{ label: t('confirm'), primary: true }],
+    })
+  }, [t])
   /**
    * Browser-owned presentation settings.
    *
@@ -303,15 +331,31 @@ export function Overlay(props: OverlayProps) {
     void fetchCredential().then((next) => setCredential(next))
   }, [])
 
+  /**
+   * The load-time check, which is also the only place a notice is raised on its own.
+   *
+   * It waits for the Host's configuration before deciding, because the flag that
+   * enables it arrives over the same fetch: raising the notice first and withdrawing
+   * it once the settings say otherwise would flash a modal at a reader who turned the
+   * behaviour off. Waiting for the flag also means a Host that never answers simply
+   * never raises one, instead of the page guessing.
+   */
   useEffect(() => {
+    if (config.checkCredentialOnLoad !== true) return
     let disposed = false
     void fetchCredential().then((next) => {
-      if (!disposed) setCredential(next)
+      if (disposed) return
+      setCredential(next)
+      // Only an unusable credential raises this. `unknown` means the check could not
+      // reach Bilibili, which is not the reader's to fix and must not send them off
+      // to replace a working token.
+      const spec = credentialNotice({ credential: next, t, onQrLogin: openQrLogin })
+      if (spec !== null) setNotice(spec)
     })
     return () => {
       disposed = true
     }
-  }, [])
+  }, [config.checkCredentialOnLoad, t])
 
   /**
    * Create a store for a room and connect it.
@@ -690,6 +734,18 @@ export function Overlay(props: OverlayProps) {
           setBallPlace(place)
           persist(order, ballSize)
         }}
+        onCredentialClick={() => {
+          // The menu already knows which condition it is describing, so the notice
+          // is built from the same reading rather than re-fetching a second one.
+          const spec = credentialNotice({ credential, t, onQrLogin: openQrLogin })
+          if (spec !== null) setNotice(spec)
+        }}
+      />
+      <Dialog
+        spec={notice}
+        onClose={() => setNotice(null)}
+        uiScale={front.uiScale}
+        t={t}
       />
     </>
   )

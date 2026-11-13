@@ -39,6 +39,20 @@ export type CopyKey =
   | 'credentialValid'
   | 'credentialUnknown'
   | 'credentialNoCsrf'
+  | 'credentialExpiredTitle'
+  | 'credentialExpiredBody'
+  | 'credentialMissingTitle'
+  | 'credentialMissingBody'
+  | 'credentialUnreadableTitle'
+  | 'credentialUnreadableBody'
+  | 'credentialNoCsrfTitle'
+  | 'credentialNoCsrfBody'
+  | 'credentialNoticeTitle'
+  | 'credentialNoticeBody'
+  | 'qrLogin'
+  | 'qrLoginPendingTitle'
+  | 'qrLoginPendingBody'
+  | 'confirm'
   | 'hostNotReady'
   | 'sendFailed'
   | 'refresh'
@@ -109,6 +123,24 @@ export const zh: Dictionary = {
   credentialValid: '有效',
   credentialUnknown: '无法验证',
   credentialNoCsrf: '缺少发言令牌',
+  credentialExpiredTitle: '登录凭据失效',
+  credentialExpiredBody:
+    '您的哔哩哔哩账号登录态（dsh refs 凭据中配置的 BILIBILI_SESSDATA 或 BILIBILI_JCT）已过期，需要进行更新。你可以使用扫码登录重新授权，也可以手动更新凭据。',
+  credentialMissingTitle: '未配置登录凭据',
+  credentialMissingBody:
+    '在 dsh refs 凭据中未找到 BILIBILI_SESSDATA，插件无法以您的账号发言或读取需要登录的内容。你可以使用扫码登录，也可以手动配置凭据。',
+  credentialUnreadableTitle: '无法读取登录凭据',
+  credentialUnreadableBody:
+    '凭据文件存在，但其中的登录凭据无法读取，请检查 dsh refs 凭据的格式与访问权限。',
+  credentialNoCsrfTitle: '登录凭据缺少发言令牌',
+  credentialNoCsrfBody:
+    'dsh refs 凭据中的 BILIBILI_JCT 缺失，登录态可用但无法发送弹幕，请补充后重试。',
+  credentialNoticeTitle: '登录凭据不可用',
+  credentialNoticeBody: '登录凭据当前不可用，详情见悬浮球菜单中的登录凭据一行。',
+  qrLogin: '扫码登录',
+  qrLoginPendingTitle: '扫码登录',
+  qrLoginPendingBody: '扫码登录功能尚未实现。',
+  confirm: '确认',
   hostNotReady: '插件后端未就绪，请重启 dsh 服务',
   sendFailed: '发送失败',
   refresh: '刷新弹幕',
@@ -178,6 +210,25 @@ export const en: Dictionary = {
   credentialValid: 'valid',
   credentialUnknown: 'could not verify',
   credentialNoCsrf: 'missing send token',
+  credentialExpiredTitle: 'Login credential expired',
+  credentialExpiredBody:
+    'The session for your Bilibili account (BILIBILI_SESSDATA or BILIBILI_JCT in the dsh refs credential) has expired and has to be renewed. Sign in with a QR code to authorise again, or update the credential by hand.',
+  credentialMissingTitle: 'No login credential',
+  credentialMissingBody:
+    'BILIBILI_SESSDATA is not present in the dsh refs credential, so the plugin cannot post as your account or read anything that needs a login. Sign in with a QR code, or configure the credential by hand.',
+  credentialUnreadableTitle: 'Login credential cannot be read',
+  credentialUnreadableBody:
+    'The credential file exists, but the login inside it cannot be read. Check the shape and the permissions of the dsh refs credential.',
+  credentialNoCsrfTitle: 'Login credential has no posting token',
+  credentialNoCsrfBody:
+    'BILIBILI_JCT is missing from the dsh refs credential. The session works, but nothing can be posted until it is added.',
+  credentialNoticeTitle: 'Login credential is not usable',
+  credentialNoticeBody:
+    'The login credential is not usable right now. The credential row in the ball menu says why.',
+  qrLogin: 'Scan QR code',
+  qrLoginPendingTitle: 'Scan QR code',
+  qrLoginPendingBody: 'Scanning a QR code is not available yet.',
+  confirm: 'OK',
   hostNotReady: 'Plugin backend not ready, restart the dsh service',
   sendFailed: 'Send failed',
   refresh: 'Refresh danmaku',
