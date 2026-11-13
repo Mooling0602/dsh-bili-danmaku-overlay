@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Bilibili-Live-Danmaku-Overlay",
-    "description": "Zeigt Bilibili-Live-Chat-Danmaku in einem schwebenden Panel, das auf jeder Seite der DSH-Weboberfläche sichtbar bleibt."
+    "description": "Zeigt Bilibili-Live-Chat-Danmaku in einem schwebenden Panel, das auf jeder Seite der DSH-Weboberfläche sichtbar bleibt.",
+    "detail": "README.en.md"
   }
 }

@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Bilibili live danmaku overlay",
-    "description": "Shows Bilibili live-room danmaku in a floating panel that stays visible on every page of the DSH Web UI."
+    "description": "Shows Bilibili live-room danmaku in a floating panel that stays visible on every page of the DSH Web UI.",
+    "detail": "README.en.md"
   }
 }

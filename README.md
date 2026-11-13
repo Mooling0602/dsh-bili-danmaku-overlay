@@ -1,106 +1,113 @@
-# Bilibili Live Danmaku Overlay
+# B站直播弹幕浮层
 
-English | [简体中文](README.zh.md)
+简体中文 | [English](README.en.md)
 
-Shows Bilibili live-room danmaku in a floating overlay inside the DSH Web UI. The overlay stays mounted across page changes, so you can watch a room while you work.
+在 DSH Web 界面里以常驻浮层显示 B 站直播间弹幕。浮层切换页面时不会卸载，可以一边干活一边看弹幕。
 
-## Features
+## 功能
 
-- Live danmaku with automatic reconnect, and a history fallback when the live socket is unavailable
-- Multiple rooms at once, each in its own window
-- A round Bilibili television entry that shows the overall state and the newest danmaku, and opens a menu that manages every room and reopens any room this browser has connected to before
-- Windows are titled with the room's real title; double-click to rename one temporarily
-- Resize a window from its bottom right corner, or minimize it to its title bar, or fold it back into the ball, none of which stops its stream
-- A room that is not streaming shows "not live" first; press View danmaku to reveal the list and unlock the input
-- Viewer count, danmaku sending, and a plugin settings page for every option
+- 实时弹幕，断线自动重连；实时连接不可用时自动回退到历史拉取
+- 同时监控多个直播间，每个房间一个独立浮窗
+- B站小电视圆形入口，聚合显示整体连接状态和最新弹幕，点击展开菜单管理全部直播间，并可以直接重新打开这台浏览器连接过的直播间
+- 浮窗标题显示直播间真实标题，双击可以临时改名
+- 可以拖动浮窗右下角调整大小，也可以把浮窗最小化为标题栏或收回悬浮球，都不会中断监控
+- 房间未开播时先显示「当前房间未开播」，点「查看弹幕」才展开内容并解锁输入框
+- 显示在线人数，可以发弹幕，所有配置项都能在插件设置页里改
 
-## Install
+## 安装
 
 ```bash
 dsh plugin --profile web add github:Mooling0602/dsh-bili-danmaku-overlay
 ```
 
-Restart dsh after installing. The package carries its own `cordis.patch.yml`, so dsh inserts the plugin into the bundle by itself. It ships built JavaScript, so installation needs no compiler step.
+安装完成后重启 dsh。包内自带 `cordis.patch.yml`，dsh 会自己把插件插入 bundle。也带有构建好的 JavaScript，所以安装过程不需要编译。
 
-Then open the plugin settings page and set `defaultRoom` to the room you want to watch.
+之后打开插件设置页，把 `defaultRoom` 设成要监听的直播间号即可。
 
-To uninstall:
+卸载：
 
 ```bash
 dsh plugin --profile web remove dsh-bili-danmaku-overlay
 ```
 
-## Credentials
+## 配置登录凭据
 
-There are two ways to sign in, and either one is enough.
+> [!NOTE]
+> 登录凭据保存在 dsh 宿主机上，而不是浏览器本地缓存。
+>
+> 确保你所使用的 dsh 实例只属于你自己，否则不建议使用本插件！
 
-The first is to put `SESSDATA` and `bili_jct` in `~/.dsh/.credentials.yaml`, which you maintain.
+有两种登录方式，任选其一即可。推荐直接扫码登录。
+
+第一种是在插件里扫码登录。当插件没有可用的凭据时，悬浮球菜单会显示相关报错，点击后弹窗里可以扫码登录。获取的登录态将保存在 `~/.dsh/bili-danmaku-overlay/credential.json`，文件只有你自己可读，并且所有 profile 共用，因此只需扫一次而不是每个 profile 扫一次。扫码登录会自行续期，不需要你反复操作。
+
+第二种是在 `~/.dsh/.credentials.yaml` 里放 `SESSDATA` 和 `bili_jct`，由你自己维护。
 
 ```yaml
 refs:
-  BILIBILI_SESSDATA: <your SESSDATA>
-  BILIBILI_JCT: <your bili_jct>
+  BILIBILI_SESSDATA: <你的 SESSDATA>
+  BILIBILI_JCT: <你的 bili_jct>
 ```
 
-To get the values: log in to Bilibili in a browser, open developer tools, then Application, then Cookies for `https://www.bilibili.com`, and copy the two values.
+取值方式：浏览器登录 B 站后打开开发者工具 -> Application -> Cookies -> `https://www.bilibili.com`，然后找到并复制这两个值。
 
-The second is to scan a QR code from inside the plugin. When the plugin has no usable credential, the ball menu says so, and the notice it raises offers a scan. The login it obtains is stored in `~/.dsh/bili-danmaku-overlay/credential.json`, which is created readable only by you and is shared by every profile, so you scan once rather than once per profile.
+只看弹幕只需 `SESSDATA`，发弹幕还需要 `bili_jct`。
 
-`preferCustomCredential` decides which one wins when both exist. It defaults to true, so the credential you wrote by hand is used first and the scanned login is the fallback. Turn it off to prefer the scanned login, for example when the hand-written token belongs to an account you no longer want to use.
+> 这份凭据的有效期较短，且不续期，需要频繁维护。不想维护的话，用扫码登录更省事。
 
-Watching needs only `SESSDATA`. Sending danmaku also needs `bili_jct`.
+两种凭据都存在时由 `preferCustomCredential` 决定用哪个，默认开启表示优先用你手写的那份，扫码登录作为回退。关掉它则优先用扫码登录，例如手写的那份属于你已经不想再用的账号。
 
-## Settings
+## 插件设置
 
-Every option is editable on the plugin settings page and applies immediately.
+所有配置项都能在插件设置页里改，修改后即时生效。
 
-| Option | Default | Description |
+| 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `defaultRoom` | empty | Room to open with; empty means type one each time |
-| `autoConnect` | `false` | Connect to the default room on load |
-| `historyLimit` | `200` | Rows kept in a window |
-| `historyFetch` | `50` | Items fetched per history request |
-| `pollMinMs` | `100` | Fastest history poll interval; the poller backs off above it on errors |
-| `statsIntervalMs` | `60000` | Viewer-count refresh interval |
-| `heartbeatMs` | `30000` | Upstream socket heartbeat |
-| `showEnterMessages` | `true` | Show "entered the room" notices |
-| `showSuperChat` | `true` | Show super chat messages |
-| `requestTimeoutMs` | `12000` | Request timeout |
-| `checkCredentialOnLoad` | `true` | Check the stored login on load and raise a notice when it is unusable. Takes effect only with `autoConnect` on |
-| `preferCustomCredential` | `true` | Prefer the credential in dsh refs over the login obtained by scanning a QR code; the other is used when the preferred one is unusable |
+| `defaultRoom` | 空 | 默认直播间号，留空则每次手动输入 |
+| `autoConnect` | `false` | 页面加载后自动连接默认直播间 |
+| `historyLimit` | `200` | 浮窗最多保留的弹幕条数 |
+| `historyFetch` | `50` | 每次拉取的历史条数 |
+| `pollMinMs` | `100` | 历史轮询的最快间隔，出错时自动退避到更慢 |
+| `statsIntervalMs` | `60000` | 在线人数刷新间隔 |
+| `heartbeatMs` | `30000` | 弹幕服务器心跳间隔 |
+| `showEnterMessages` | `true` | 显示「进入直播间」消息 |
+| `showSuperChat` | `true` | 显示醒目留言 |
+| `requestTimeoutMs` | `12000` | 接口请求超时 |
+| `checkCredentialOnLoad` | `true` | 页面加载时检查登录凭据，不可用时弹窗说明；仅在自动连接开启时生效 |
+| `preferCustomCredential` | `true` | 优先使用 dsh refs 中的凭据而不是扫码登录获得的登录态；首选不可用时改用另一个 |
 
-## Front-end settings
+## 前端设置
 
-The Front-end settings block on the configuration page is stored in the browser only and never written to the dsh configuration. A slider takes effect immediately.
+配置页里的「前端设置」只保存在当前浏览器，不写入 dsh 配置，拖动滑块即时生效。
 
-| Option | Range | Default |
+| 选项 | 范围 | 默认值 |
 | --- | --- | --- |
-| Ball diameter | 32-96px | 48px |
-| Window zoom (DPI) | 50-300% | 100% |
-| Window size | 240-720 by 180-760px | 320 by 300px |
+| 悬浮球大小 | 32–96px | 48px |
+| 窗口内缩放（DPI） | 50–300% | 100% |
+| 弹幕窗口大小 | 240–720 × 180–760px | 320×300px |
 
-A window is resized by dragging its bottom right corner. A minimized window is only its title bar, so its size is not adjustable.
+弹幕窗口的大小直接拖动窗口右下角调整，最小化的窗口只显示标题栏，不受影响。
 
-The zoom changes the size of the text, spacing and buttons inside a danmaku window, and also the room list behind the floating ball, while leaving the window itself alone, so the two are adjusted separately. At 100% it follows the browser's own zoom for the page. A value far above or below the comfortable range is still accepted, and the settings row says so.
+「窗口内缩放」改变弹幕窗口里文字、间距和按钮的大小，也作用于悬浮球点开后的「正在监控弹幕的直播间」列表，但不影响窗口本身的大小，两者可以分开调。100% 表示跟随当前页面的浏览器缩放；数值过大或过小时设置页会给出提示，但仍然可以保存。
 
-The reset button at the top right of the block restores the ball diameter, the window zoom and the window size. It stays disabled while nothing has been changed.
+「前端设置」右上角的重置按钮会把悬浮球大小、窗口内缩放和弹幕窗口大小一起还原成默认值，没有改动时该按钮不可用。
 
-## Notes
+## 说明
 
-- The viewer count is a real head count, not the popularity score some Bilibili endpoints report.
-- Hover the status dot in a window's top left corner to read the exact state: not live, connection failed, reading history danmaku, or connected.
+- 在线人数是真实观看人数，不是 B 站某些接口返回的人气值。
+- 鼠标移到窗口左上角的状态点上，可以看到未开播、连接失败、正在查看历史弹幕、已连接这些具体状态。
 
-## Development
+## 开发
 
-The sources are TypeScript. `index.js` and `client.js` are build output and are committed.
+源码是 TypeScript，`index.js` 和 `client.js` 是构建产物。
 
 ```bash
 npm run build
 npm run typecheck
 ```
 
-Rebuild after editing `src/`. `client.js` reaches the page on a refresh; `index.js` is the Host half and needs `dsh` restarted.
+改完 `src/` 后重新构建。`client.js` 刷新页面即可生效；`index.js` 是 Host 侧，需要重启 `dsh`。
 
-## License
+## 许可证
 
 MIT

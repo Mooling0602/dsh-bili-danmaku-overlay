@@ -1,6 +1,7 @@
 {
   "meta": {
     "title": "Sobreposição de danmaku da Bilibili ao vivo",
-    "description": "Mostra os danmaku do chat ao vivo do Bilibili em um painel flutuante que permanece visível em todas as páginas da interface web do DSH."
+    "description": "Mostra os danmaku do chat ao vivo do Bilibili em um painel flutuante que permanece visível em todas as páginas da interface web do DSH.",
+    "detail": "README.en.md"
   }
 }

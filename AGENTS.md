@@ -77,7 +77,7 @@ Each document has one job. When a sentence does not fit the document it is in, m
 | --- | --- | --- |
 | `AGENTS.md` | AI coding agents, maintainers | coding conventions and development rules, and nothing else |
 | `CONTEXT.md` | agents, maintainers | technical detail: architecture axioms, invariants, command recipes, pitfalls, protocol notes |
-| `README.md`, `README.zh.md` | ordinary users of this plugin | short, readable, task oriented material about what it does and how to use it |
+| `README.md`, `README.en.md` | ordinary users of this plugin | short, readable, task oriented material about what it does and how to use it |
 
 ### `AGENTS.md`
 
@@ -87,7 +87,7 @@ Rules and conventions only. An invariant or a technical fact that lands here has
 
 **All technical detail converges here.** A fact precise enough to need care, such as a detection order, an ordering constraint, a timeout, a wire format or a workaround for a dependency bug, belongs in `CONTEXT.md` rather than in `AGENTS.md` or `README.md`. Keep it current, because a behavioural change that leaves `CONTEXT.md` stale is an incomplete change. Its module map is part of that contract: a new, renamed or removed module updates the map in the same change.
 
-### `README.md` and `README.zh.md`
+### `README.md` and `README.en.md`
 
 Written for a user who wants to install the plugin and get it working, not for someone reading the source. Prefer shortening over explaining.
 
@@ -160,7 +160,7 @@ This rule applies to every sentence you write, including the ones in this file. 
 - **The renderer wraps the line, not the author.** Front ends such as the GitHub web interface set their own width and reflow a paragraph to fit the window, so a complete line arrives there as readable prose. A break written into the source reaches the renderer as a hard break inside the paragraph, which renders wrongly and interrupts reading.
 - **Keep the newline that ends a block.** A heading, a table row, a list item, a code block, a block quote and the blank line between two blocks each stay on their own line. Only the newline that a soft wrap would have inserted inside a paragraph goes away.
 - **Keep CJK text joined without a space.** A Chinese paragraph is one line, and a translation that joins two fragments has no space where an English sentence would need one.
-- **`.markdownlint.json` encodes this choice.** `MD013` (line length) is off, which is what makes a long line compliant instead of a defect, and `MD024` permits the same heading text under different parents. markdownlint is a local convenience and not a gate, because nothing in this repository runs it: run `npx --yes markdownlint-cli2 AGENTS.md CONTEXT.md README.md README.zh.md` by hand when you want the feedback, and do not add it to a script or a workflow without the maintainer asking.
+- **`.markdownlint.json` encodes this choice.** `MD013` (line length) is off, which is what makes a long line compliant instead of a defect, and `MD024` permits the same heading text under different parents. markdownlint is a local convenience and not a gate, because nothing in this repository runs it: run `npx --yes markdownlint-cli2 AGENTS.md CONTEXT.md README.md README.en.md` by hand when you want the feedback, and do not add it to a script or a workflow without the maintainer asking.
 
 ## 8. Working with the DeepSeek Harness runtime
 
@@ -197,7 +197,7 @@ English is the working language of this repository. Write in English by default,
 - **The standing exception is i18n, and this package has two of them.** `src/client/copy.ts` holds the `zh` and `en` dictionaries that the overlay renders, and `locale/*.json` holds the plugin listing's title and description. Their content stays in the language its locale requires.
 - **`CopyKey` is a compile-time contract.** Every key exists in both dictionaries with identical interpolation placeholders, so a new user facing string is added to both in the same change. Never widen the dictionary type or fall back to a literal in a component.
 - **`locale/*.json` holds only `meta`.** Runtime strings must not move there: the locale service takes dictionaries by value and nothing in the client bundle reads a JSON file at runtime, so a string that lived only in JSON would render as a raw key.
-- **`README.zh.md` is a full translation, not an exception to the rule.** It mirrors `README.md` and is updated together with it.
+- **`README.md` and `README.en.md` are the user facing exception, and they mirror each other.** `README.md` is written for the audience the plugin serves and is currently Chinese; `README.en.md` is its full English translation. The two carry the same headings and the same claims, and a change to one without the other is an incomplete change.
 - **Third party text is never translated.** Upstream error strings, API field values and host diagnostics are preserved verbatim. A Bilibili room title is shown as the streamer wrote it.
 - Identifiers, protocol tokens, package names, file names and proper nouns are not translated.
 - **Do not annotate the exception.** When a string is intentionally non English, leave it and move on. No note, no comment, no translation in brackets, no explanation of why it is not English.
