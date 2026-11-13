@@ -22,6 +22,8 @@ The split matters in practice: a Host change reaches the running process after a
 | `src/credentials.ts` | Resolves the session from either store: the `BILIBILI_SESSDATA` and `BILIBILI_JCT` references in `~/.dsh/.credentials.yaml`, or the login `src/store.ts` holds. Names the store it used. |
 | `src/store.ts` | The credential this plugin owns, at `~/.dsh/bili-danmaku-overlay/credential.json`, written atomically with mode `600` in a `700` directory. |
 | `src/qrlogin.ts` | The QR sign-in flow: asks for a key, draws it as an SVG, polls until it resolves, then writes the login through `src/store.ts`. |
+| `src/refresh.ts` | Renews a scanned login through the four call exchange, writing the new session before retiring the old token. Never throws. |
+| `src/refreshlog.ts` | Appends every renewal step to `~/.dsh/bili-danmaku-overlay/refresh.log` and reads the newest records back for diagnosis. Holds no tokens. |
 | `src/bili.ts` | Upstream HTTP: room resolution, WBI signing, history, stats, sending a danmaku. |
 | `src/comet.ts` | The live danmaku WebSocket: handshake, auth, frame decoding, heartbeat, reconnect. |
 | `src/stream.ts` | One room's connection lifecycle, turning Comet frames into message rows and announcing state changes. |
@@ -115,6 +117,22 @@ Presence and validity are separate facts. `credentialStatus` reports the flags f
 **The key lives in the Host process, not the page.** The page cannot poll for a key it never generated, so the Host holds one session per process and a new scan replaces it. That single holder is also what keeps two pages from interleaving two polls over one key.
 
 **A completed sign-in is confirmed against `nav` before it is reported.** That call is what separates "the login worked" from "the token was issued but is already unusable", and its account name is what lets the surface say who was signed in. A failed confirmation does not undo the login: the cookies were issued, so the record is kept and the name is simply absent.
+
+### Renewal
+
+A scanned login renews itself, and a refs credential does not. Only the scanned store holds a `refresh_token`, because the sign-in response is the only place one is issued and the refs section has no field for it. That asymmetry is the whole reason the setting exists: a session this plugin obtained can be kept alive without the reader, while a hand-written token cannot, and pretending otherwise would either rotate a token the plugin does not own or silently do nothing.
+
+**Renewal runs inside `credentialStatus`, before the session check, and only when `source` is `scanned`.** Being inside the status call means it runs when the reader is looking at the credential anyway, rather than on a timer that would spend requests while nobody is watching. Being before the check means a session that was about to lapse is judged on its replacement instead of on the token on its way out. `REFRESH_INTERVAL_MS` caps it at one attempt per six hours in the process, because the page polls that route and without a cap every poll would ask Bilibili whether renewal is due.
+
+**The sequence is four calls and their order is not free.** `cookie/info?csrf=<bili_jct>` is an advisory check and a `false` answer means stop; renewing anyway would rotate a token that did not need rotating. `CorrespondPath` is RSA-OAEP with SHA-256 over the ASCII of `refresh_<ms>`, encrypted to the key Bilibili's own web client publishes, then written as lowercase base16. `GET www.bilibili.com/correspond/1/<path>` returns an SSR page whose `div id="1-name"` text is the `refresh_csrf`; the surrounding markup is present and has to be cut away, so the token is read out of that element rather than out of the page text. `POST cookie/refresh` then takes `csrf`, `refresh_csrf`, `source=main_web` and the old `refresh_token`, and returns a new session in `Set-Cookie` plus a new `refresh_token` in the body.
+
+**The new session is written before the old token is retired.** `POST confirm/refresh` takes the csrf from the new cookie and the old refresh token, and it is what makes the old token stop working. Writing first means a crash between the two leaves a working session and a merely unused old token. Confirming first would leave the reader holding neither, which is the one failure this order exists to prevent. The confirmation is also the single step whose failure is ignored on purpose: the session already works, so the only cost is a token that stays usable on the server.
+
+**`SESSDATA` comes from `Set-Cookie`, not from the payload's URL.** The headers carry `sid` and the URL does not, so the exchange copies the headers out before the body is read and consults the URL only for what the headers left out. This is the same trap the sign-in flow has, seen from the other side.
+
+**Nothing here throws.** A refusal, a dropped connection and a session that needs no renewal all leave the stored login as it was, because the caller's next move is the same in every case: keep using what works and let the reader sign in when it stops. That also means the difference is invisible from the page, which is why every step appends a record to `~/.dsh/bili-danmaku-overlay/refresh.log`.
+
+**The refresh log is a file rather than a memory list, because the failure is not reproducible.** By the time a renewal has gone wrong the old token is spent, so a second attempt measures a different situation. The file is one JSON record per event carrying the step, the HTTP status, the payload's numeric code and the step's own verdict. It never carries a token, a cookie or a refresh token, because it is read and quoted during debugging and a secret there would outlive the session it belongs to. `GET /api/refresh-log` returns the newest records and `POST /api/refresh` forces an attempt, which is the only way to see the later steps run before a session naturally comes due.
 
 **The two deep imports from `qrcode` are deliberate.** The package entry pulls in a PNG encoder and a command line parser for its CLI, and this Host only draws an SVG, so `qrcode/lib/core/qrcode.js` and `qrcode/lib/renderer/svg-tag.js` are imported directly and `src/qrcode-internals.d.ts` types them. Taking the entry point instead grew the Host bundle from 45 to 200 kB; the deep imports bring it to 115 kB.
 

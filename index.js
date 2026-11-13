@@ -1981,59 +1981,12 @@ var require_svg_tag = __commonJS({
 });
 
 // src/credentials.ts
-import { readFileSync as readFileSync2 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { join as join2 } from "node:path";
+import { readFileSync as readFileSync3 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { join as join3 } from "node:path";
 
-// src/config.ts
-import Schema from "@deepseek-ai/schemastery";
-var DEFAULT_HISTORY_LIMIT = 200;
-var DEFAULT_HISTORY_FETCH = 50;
-var DEFAULT_POLL_MIN_MS = 100;
-var DEFAULT_STATS_INTERVAL_MS = 6e4;
-var DEFAULT_HEARTBEAT_MS = 3e4;
-var DEFAULT_REQUEST_TIMEOUT_MS = 12e3;
-var MAX_DANMAKU_CHARS = 20;
-var SESSDATA_REF = "BILIBILI_SESSDATA";
-var CSRF_REF = "BILIBILI_JCT";
-var Config = Schema.object({
-  defaultRoom: Schema.string().default("").volatile().description("Room id to open the overlay with. Leave empty to type one each time.").i18n({ zh: "浮层默认打开的直播间号，留空则每次手动输入。" }),
-  autoConnect: Schema.boolean().default(false).volatile().description("Connect to the default room as soon as the page loads. Also gates the load-time credential notice, which only explains a failure this connection would cause.").i18n({ zh: "页面加载后自动连接默认直播间。同时决定加载时是否弹出凭据提示，该提示只解释这个自动连接会遇到的失败。" }),
-  historyLimit: Schema.natural().min(20).max(2e3).default(DEFAULT_HISTORY_LIMIT).volatile().description("Danmaku rows kept in the overlay before the oldest scroll away.").i18n({ zh: "浮层最多保留的弹幕条数。" }),
-  historyFetch: Schema.natural().min(10).max(200).default(DEFAULT_HISTORY_FETCH).volatile().description("Items fetched from the history endpoint on connect and on refresh.").i18n({ zh: "连接和刷新时从历史接口拉取的条数。" }),
-  pollMinMs: Schema.natural().min(100).max(1e4).step(100).default(DEFAULT_POLL_MIN_MS).volatile().description("Fastest history poll interval in milliseconds; the poller backs off above it on errors.").i18n({ zh: "历史轮询的最快间隔（毫秒），出错时会自动退避到更慢。" }),
-  statsIntervalMs: Schema.natural().min(1e4).max(6e5).step(1e3).default(DEFAULT_STATS_INTERVAL_MS).volatile().description("How often the viewer count is refreshed, in milliseconds.").i18n({ zh: "在线人数刷新间隔（毫秒）。" }),
-  heartbeatMs: Schema.natural().min(1e4).max(12e4).step(1e3).default(DEFAULT_HEARTBEAT_MS).volatile().description("Heartbeat interval for the upstream danmaku socket, in milliseconds.").i18n({ zh: "弹幕服务器心跳间隔（毫秒）。" }),
-  showEnterMessages: Schema.boolean().default(true).volatile().description("Show “entered the room” notices in the overlay.").i18n({ zh: "在浮层显示“进入直播间”消息。" }),
-  showSuperChat: Schema.boolean().default(true).volatile().description("Show super chat messages in the overlay.").i18n({ zh: "在浮层显示醒目留言。" }),
-  requestTimeoutMs: Schema.natural().min(3e3).max(6e4).step(1e3).default(DEFAULT_REQUEST_TIMEOUT_MS).volatile().description("Timeout for one Bilibili API request, in milliseconds.").i18n({ zh: "请求 Bilibili 接口的超时时间（毫秒）。" }),
-  preferCustomCredential: Schema.boolean().default(true).volatile().description("Prefer BILIBILI_SESSDATA and BILIBILI_JCT from the dsh refs credential, falling back to the scanned login when they are unusable.").i18n({ zh: "优先使用自定义凭据。启用后优先使用 dsh refs 凭据中配置的 BILIBILI_SESSDATA 和 BILIBILI_JCT，这些凭据不可用时回退到扫码登录获得的登录态。" }),
-  checkCredentialOnLoad: Schema.boolean().default(true).volatile().description("Check the stored login when the page loads and raise a notice when it is unusable. Runs only while automatic connection is on, because otherwise the overlay does nothing on load for the notice to explain.").i18n({ zh: "自动检查登录凭据有效性。页面加载时检查，凭据不可用时弹窗说明。仅在自动连接开启时生效，否则加载时插件不主动做任何事，弹窗无从解释。" })
-});
-function readField(field, fallback) {
-  const value = field?.get();
-  return value === void 0 ? fallback : value;
-}
-function readNumber(field, fallback) {
-  const value = readField(field, fallback);
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
-}
-function readLimits(config) {
-  return {
-    historyLimit: readNumber(config?.historyLimit, DEFAULT_HISTORY_LIMIT),
-    historyFetch: readNumber(config?.historyFetch, DEFAULT_HISTORY_FETCH),
-    pollMinMs: readNumber(config?.pollMinMs, DEFAULT_POLL_MIN_MS),
-    heartbeatMs: readNumber(config?.heartbeatMs, DEFAULT_HEARTBEAT_MS),
-    requestTimeoutMs: readNumber(config?.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS),
-    showEnterMessages: readField(config?.showEnterMessages, true),
-    showSuperChat: readField(config?.showSuperChat, true),
-    checkCredentialOnLoad: readField(config?.checkCredentialOnLoad, true),
-    // True by default so an installation that already maintained refs credentials keeps
-    // using them after upgrading. Reading the scanned store first would silently move
-    // every existing user off the credential they set up by hand.
-    preferCustomCredential: readField(config?.preferCustomCredential, true)
-  };
-}
+// src/refresh.ts
+import { webcrypto } from "node:crypto";
 
 // src/store.ts
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -2091,7 +2044,235 @@ function clearLogin() {
   }
 }
 
+// src/refreshlog.ts
+import { appendFileSync, mkdirSync as mkdirSync2, readFileSync as readFileSync2 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { join as join2 } from "node:path";
+var LOG_DIR = join2(homedir2(), ".dsh", "bili-danmaku-overlay");
+var REFRESH_LOG_FILE = join2(LOG_DIR, "refresh.log");
+var READ_LIMIT = 60;
+function recordRefreshEvent(event) {
+  try {
+    mkdirSync2(LOG_DIR, { recursive: true, mode: 448 });
+    appendFileSync(REFRESH_LOG_FILE, `${JSON.stringify(event)}
+`, { encoding: "utf8", mode: 384 });
+  } catch {
+  }
+}
+function readRefreshLog(limit = READ_LIMIT) {
+  let text;
+  try {
+    text = readFileSync2(REFRESH_LOG_FILE, "utf8");
+  } catch {
+    return [];
+  }
+  const events = [];
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    try {
+      const parsed = JSON.parse(line);
+      if (typeof parsed.at === "string" && typeof parsed.step === "string") events.push(parsed);
+    } catch {
+    }
+  }
+  return events.slice(-limit);
+}
+
+// src/refresh.ts
+var INFO_URL = "https://passport.bilibili.com/x/passport-login/web/cookie/info";
+var CORRESPOND_URL = "https://www.bilibili.com/correspond/1";
+var REFRESH_URL = "https://passport.bilibili.com/x/passport-login/web/cookie/refresh";
+var CONFIRM_URL = "https://passport.bilibili.com/x/passport-login/web/confirm/refresh";
+var UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+var CORRESPOND_KEY = {
+  kty: "RSA",
+  n: "y4HdjgJHBlbaBN04VERG4qNBIFHP6a3GozCl75AihQloSWCXC5HDNgyinEnhaQ_4-gaMud_GF50elYXLlCToR9se9Z8z433U3KjM-3Yx7ptKkmQNAMggQwAVKgq3zYAoidNEWuxpkY_mAitTSRLnsJW-NCTa0bqBFF6Wm1MxgfE",
+  e: "AQAB"
+};
+async function correspondPath(timestamp) {
+  const key = await webcrypto.subtle.importKey("jwk", CORRESPOND_KEY, { name: "RSA-OAEP", hash: "SHA-256" }, true, [
+    "encrypt"
+  ]);
+  const ciphertext = new Uint8Array(
+    await webcrypto.subtle.encrypt({ name: "RSA-OAEP" }, key, new TextEncoder().encode(`refresh_${timestamp}`))
+  );
+  return [...ciphertext].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+async function call(url, init, timeoutMs) {
+  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  const cookies = response.headers.getSetCookie?.() ?? [];
+  const payload = await response.json().catch(() => null);
+  return { status: response.status, payload, cookies };
+}
+async function refreshLogin(timeoutMs = 1e4) {
+  const login = readLogin();
+  if (login === null) return { renewed: false, needed: false, note: "没有扫码登录凭据" };
+  if (login.refreshToken === void 0 || login.refreshToken === "") {
+    return { renewed: false, needed: false, note: "凭据中没有 refresh_token，无法续期" };
+  }
+  const cookie = login.biliJct === "" ? `SESSDATA=${login.sessdata}` : `SESSDATA=${login.sessdata}; bili_jct=${login.biliJct}`;
+  const headers = { "User-Agent": UA, Cookie: cookie, Referer: "https://www.bilibili.com/" };
+  let needs = false;
+  try {
+    const info = await call(`${INFO_URL}?csrf=${encodeURIComponent(login.biliJct)}`, { headers }, timeoutMs);
+    const data = info.payload?.data ?? {};
+    needs = data.refresh === true;
+    recordEvent("check", info.status === 200 && needs ? "ok" : "skipped", info.status, info.payload?.code ?? null, `refresh=${String(data.refresh)}`, needs ? "服务端报告需要续期" : "服务端报告暂不需要续期");
+    if (!needs) return { renewed: false, needed: false, note: "暂不需要续期" };
+  } catch (error) {
+    recordEvent("check", "failed", 0, null, "", error instanceof Error ? error.message : "检查续期需求失败");
+    return { renewed: false, needed: false, note: "检查续期需求失败" };
+  }
+  let path;
+  try {
+    path = await correspondPath(Date.now());
+  } catch (error) {
+    recordEvent("correspond", "failed", 0, null, "", error instanceof Error ? error.message : "生成 CorrespondPath 失败");
+    return { renewed: false, needed: true, note: "生成 CorrespondPath 失败" };
+  }
+  let refreshCsrf = "";
+  try {
+    const response = await fetch(`${CORRESPOND_URL}/${path}`, { headers, signal: AbortSignal.timeout(timeoutMs) });
+    const html = await response.text();
+    refreshCsrf = html.match(/id="1-name"[^>]*>([0-9a-fA-F]{32})</)?.[1] ?? "";
+    recordEvent("correspond", response.status === 200 && refreshCsrf !== "" ? "ok" : "failed", response.status, null, refreshCsrf === "" ? "未取到 refresh_csrf" : "已取到 refresh_csrf", refreshCsrf === "" ? "读取 refresh_csrf 失败" : "已取得 refresh_csrf");
+  } catch (error) {
+    recordEvent("correspond", "failed", 0, null, "", error instanceof Error ? error.message : "请求 CorrespondPath 失败");
+    return { renewed: false, needed: true, note: "请求 CorrespondPath 失败" };
+  }
+  if (refreshCsrf === "") return { renewed: false, needed: true, note: "读取 refresh_csrf 失败" };
+  let exchanged;
+  try {
+    const body = new URLSearchParams({
+      csrf: login.biliJct,
+      refresh_csrf: refreshCsrf,
+      source: "main_web",
+      refresh_token: login.refreshToken
+    });
+    exchanged = await call(
+      REFRESH_URL,
+      { method: "POST", headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" }, body },
+      timeoutMs
+    );
+  } catch (error) {
+    recordEvent("refresh", "failed", 0, null, "", error instanceof Error ? error.message : "请求续期失败");
+    return { renewed: false, needed: true, note: "请求续期失败" };
+  }
+  const code = exchanged.payload?.code ?? null;
+  if (code !== 0) {
+    recordEvent("refresh", "failed", exchanged.status, code, String(exchanged.payload?.message ?? ""), "服务端拒绝续期");
+    return { renewed: false, needed: true, note: `续期被拒绝（${String(code)}）` };
+  }
+  const url = typeof exchanged.payload?.data?.url === "string" ? exchanged.payload.data.url : "";
+  const nextToken = typeof exchanged.payload?.data?.refresh_token === "string" ? exchanged.payload.data.refresh_token : "";
+  const sessdata = readExchangedCookie(exchanged, url, "SESSDATA");
+  const biliJct = readExchangedCookie(exchanged, url, "bili_jct");
+  if (sessdata === "") {
+    recordEvent("refresh", "failed", exchanged.status, code, "响应中没有 SESSDATA", "续期响应缺少会话凭据");
+    return { renewed: false, needed: true, note: "续期响应缺少会话凭据" };
+  }
+  const next = {
+    sessdata,
+    biliJct: biliJct === "" ? login.biliJct : biliJct,
+    dedeUserId: login.dedeUserId,
+    uname: login.uname,
+    refreshToken: nextToken === "" ? login.refreshToken : nextToken,
+    loggedInAt: login.loggedInAt
+  };
+  try {
+    writeLogin(next);
+    recordEvent("store", "ok", 0, null, `sessdata=${String(sessdata.length)}`, "新凭据已写入");
+  } catch (error) {
+    recordEvent("store", "failed", 0, null, "", error instanceof Error ? error.message : "写入新凭据失败");
+    return { renewed: false, needed: true, note: "写入新凭据失败" };
+  }
+  try {
+    const body = new URLSearchParams({ csrf: next.biliJct, refresh_token: login.refreshToken });
+    const confirmed = await call(
+      CONFIRM_URL,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": UA, Cookie: `SESSDATA=${next.sessdata}; bili_jct=${next.biliJct}`, Referer: "https://www.bilibili.com/" },
+        body
+      },
+      timeoutMs
+    );
+    const confirmCode = confirmed.payload?.code ?? null;
+    recordEvent("confirm", confirmCode === 0 ? "ok" : "failed", confirmed.status, confirmCode, String(confirmed.payload?.message ?? ""), confirmCode === 0 ? "旧 refresh_token 已失效" : "确认失败，旧 refresh_token 仍然有效");
+  } catch (error) {
+    recordEvent("confirm", "failed", 0, null, "", error instanceof Error ? error.message : "确认续期失败");
+  }
+  return { renewed: true, needed: true, note: "续期成功" };
+}
+function readExchangedCookie(exchanged, url, name) {
+  for (const header of exchanged.cookies) {
+    const match = header.match(new RegExp(`^\\s*${name}=([^;]*)`));
+    if (match !== null && match[1] !== void 0 && match[1].trim() !== "") return match[1].trim();
+  }
+  if (url === "") return "";
+  try {
+    return new URL(url).searchParams.get(name) ?? "";
+  } catch {
+    return "";
+  }
+}
+function recordEvent(step, outcome, status, code, detail, note) {
+  recordRefreshEvent({ at: (/* @__PURE__ */ new Date()).toISOString(), step, outcome, status, code, detail, note });
+}
+
+// src/config.ts
+import Schema from "@deepseek-ai/schemastery";
+var DEFAULT_HISTORY_LIMIT = 200;
+var DEFAULT_HISTORY_FETCH = 50;
+var DEFAULT_POLL_MIN_MS = 100;
+var DEFAULT_STATS_INTERVAL_MS = 6e4;
+var DEFAULT_HEARTBEAT_MS = 3e4;
+var DEFAULT_REQUEST_TIMEOUT_MS = 12e3;
+var MAX_DANMAKU_CHARS = 20;
+var SESSDATA_REF = "BILIBILI_SESSDATA";
+var CSRF_REF = "BILIBILI_JCT";
+var Config = Schema.object({
+  defaultRoom: Schema.string().default("").volatile().description("Room id to open the overlay with. Leave empty to type one each time.").i18n({ zh: "浮层默认打开的直播间号，留空则每次手动输入。" }),
+  autoConnect: Schema.boolean().default(false).volatile().description("Connect to the default room as soon as the page loads. Also gates the load-time credential notice, which only explains a failure this connection would cause.").i18n({ zh: "页面加载后自动连接默认直播间。同时决定加载时是否弹出凭据提示，该提示只解释这个自动连接会遇到的失败。" }),
+  historyLimit: Schema.natural().min(20).max(2e3).default(DEFAULT_HISTORY_LIMIT).volatile().description("Danmaku rows kept in the overlay before the oldest scroll away.").i18n({ zh: "浮层最多保留的弹幕条数。" }),
+  historyFetch: Schema.natural().min(10).max(200).default(DEFAULT_HISTORY_FETCH).volatile().description("Items fetched from the history endpoint on connect and on refresh.").i18n({ zh: "连接和刷新时从历史接口拉取的条数。" }),
+  pollMinMs: Schema.natural().min(100).max(1e4).step(100).default(DEFAULT_POLL_MIN_MS).volatile().description("Fastest history poll interval in milliseconds; the poller backs off above it on errors.").i18n({ zh: "历史轮询的最快间隔（毫秒），出错时会自动退避到更慢。" }),
+  statsIntervalMs: Schema.natural().min(1e4).max(6e5).step(1e3).default(DEFAULT_STATS_INTERVAL_MS).volatile().description("How often the viewer count is refreshed, in milliseconds.").i18n({ zh: "在线人数刷新间隔（毫秒）。" }),
+  heartbeatMs: Schema.natural().min(1e4).max(12e4).step(1e3).default(DEFAULT_HEARTBEAT_MS).volatile().description("Heartbeat interval for the upstream danmaku socket, in milliseconds.").i18n({ zh: "弹幕服务器心跳间隔（毫秒）。" }),
+  showEnterMessages: Schema.boolean().default(true).volatile().description("Show “entered the room” notices in the overlay.").i18n({ zh: "在浮层显示“进入直播间”消息。" }),
+  showSuperChat: Schema.boolean().default(true).volatile().description("Show super chat messages in the overlay.").i18n({ zh: "在浮层显示醒目留言。" }),
+  requestTimeoutMs: Schema.natural().min(3e3).max(6e4).step(1e3).default(DEFAULT_REQUEST_TIMEOUT_MS).volatile().description("Timeout for one Bilibili API request, in milliseconds.").i18n({ zh: "请求 Bilibili 接口的超时时间（毫秒）。" }),
+  preferCustomCredential: Schema.boolean().default(true).volatile().description("Prefer BILIBILI_SESSDATA and BILIBILI_JCT from the dsh refs credential, falling back to the scanned login when they are unusable.").i18n({ zh: "优先使用自定义凭据。启用后优先使用 dsh refs 凭据中配置的 BILIBILI_SESSDATA 和 BILIBILI_JCT，这些凭据不可用时回退到扫码登录获得的登录态。" }),
+  checkCredentialOnLoad: Schema.boolean().default(true).volatile().description("Check the stored login when the page loads and raise a notice when it is unusable. Runs only while automatic connection is on, because otherwise the overlay does nothing on load for the notice to explain.").i18n({ zh: "自动检查登录凭据有效性。页面加载时检查，凭据不可用时弹窗说明。仅在自动连接开启时生效，否则加载时插件不主动做任何事，弹窗无从解释。" })
+});
+function readField(field, fallback) {
+  const value = field?.get();
+  return value === void 0 ? fallback : value;
+}
+function readNumber(field, fallback) {
+  const value = readField(field, fallback);
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+function readLimits(config) {
+  return {
+    historyLimit: readNumber(config?.historyLimit, DEFAULT_HISTORY_LIMIT),
+    historyFetch: readNumber(config?.historyFetch, DEFAULT_HISTORY_FETCH),
+    pollMinMs: readNumber(config?.pollMinMs, DEFAULT_POLL_MIN_MS),
+    heartbeatMs: readNumber(config?.heartbeatMs, DEFAULT_HEARTBEAT_MS),
+    requestTimeoutMs: readNumber(config?.requestTimeoutMs, DEFAULT_REQUEST_TIMEOUT_MS),
+    showEnterMessages: readField(config?.showEnterMessages, true),
+    showSuperChat: readField(config?.showSuperChat, true),
+    checkCredentialOnLoad: readField(config?.checkCredentialOnLoad, true),
+    // True by default so an installation that already maintained refs credentials keeps
+    // using them after upgrading. Reading the scanned store first would silently move
+    // every existing user off the credential they set up by hand.
+    preferCustomCredential: readField(config?.preferCustomCredential, true)
+  };
+}
+
 // src/credentials.ts
+var REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1e3;
+var lastRefreshAttempt = 0;
 var CHECK_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 var BiliError = class extends Error {
   /** Bilibili's numeric code, or a short string tag for local failures. */
@@ -2106,11 +2287,11 @@ var BiliError = class extends Error {
     this.code = code;
   }
 };
-var CREDENTIAL_FILE = join2(homedir2(), ".dsh", ".credentials.yaml");
+var CREDENTIAL_FILE = join3(homedir3(), ".dsh", ".credentials.yaml");
 function readCredentialRef(name) {
   let text;
   try {
-    text = readFileSync2(CREDENTIAL_FILE, "utf8");
+    text = readFileSync3(CREDENTIAL_FILE, "utf8");
   } catch {
     throw new BiliError(`未找到凭据文件 ${CREDENTIAL_FILE}，请先在 DSH 中配置登录凭据`, "no-credential");
   }
@@ -2220,6 +2401,15 @@ async function credentialStatus(timeoutMs = 0, preferCustomCredential = true) {
   };
   if (!hasSess) return { ...base, valid: "no", code: "missing" };
   if (timeoutMs <= 0) return base;
+  if (base.source === "scanned" && Date.now() - lastRefreshAttempt >= REFRESH_INTERVAL_MS) {
+    lastRefreshAttempt = Date.now();
+    const outcome = await refreshLogin(timeoutMs);
+    if (outcome.renewed) {
+      const renewed = buildCookie(preferCustomCredential);
+      const session3 = await checkSession(renewed, timeoutMs);
+      return { ...base, hasCsrf: cookieValue(renewed, "bili_jct") !== "", ...session3 };
+    }
+  }
   const session2 = await checkSession(cookie, timeoutMs);
   return { ...base, ...session2 };
 }
@@ -2417,7 +2607,7 @@ function toDanmaku(message, options) {
 
 // src/bili.ts
 import { createHash } from "node:crypto";
-var UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+var UA2 = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 var MIXIN_KEY_TABLE = [
   46,
   47,
@@ -2488,7 +2678,7 @@ var md5 = (text) => createHash("md5").update(text).digest("hex");
 async function biliJson(url, referer, options = {}) {
   const allowCodes = options.allowCodes ?? [];
   const headers = {
-    "User-Agent": UA,
+    "User-Agent": UA2,
     Referer: referer,
     "Accept-Language": "zh-CN,zh;q=0.9"
   };
@@ -2570,7 +2760,7 @@ async function fetchRoomStats(roomId, timeoutMs = 12e3) {
   if (uid <= 0) return { roomId, online: 0, liveStatus };
   const url = `https://api.live.bilibili.com/xlive/general-interface/v1/rank/getOnlineGoldRank?ruid=${uid}&roomId=${roomId}&page=1&pageSize=1`;
   const response = await fetch(url, {
-    headers: { "User-Agent": UA, Referer: `https://live.bilibili.com/${roomId}` },
+    headers: { "User-Agent": UA2, Referer: `https://live.bilibili.com/${roomId}` },
     signal: AbortSignal.timeout(timeoutMs)
   });
   const payload = await response.json().catch(() => null);
@@ -2640,7 +2830,7 @@ async function sendDanmaku(roomInput, text, timeoutMs = 12e3, preferCustomCreden
   const response = await fetch("https://api.live.bilibili.com/msg/send", {
     method: "POST",
     headers: {
-      "User-Agent": UA,
+      "User-Agent": UA2,
       Referer: `https://live.bilibili.com/${resolved.roomId}`,
       "Content-Type": "application/x-www-form-urlencoded",
       Cookie: cookie
@@ -2883,7 +3073,7 @@ data: ${JSON.stringify(data)}
 async function fetchHistory(roomId, fetchCount, timeoutMs = 12e3, preferCustomCredential = true) {
   const url = `https://api.live.bilibili.com/xlive/web-room/v1/dM/gethistory?roomid=${roomId}&room_type=0`;
   const headers = {
-    "User-Agent": UA,
+    "User-Agent": UA2,
     Referer: `https://live.bilibili.com/${roomId}`
   };
   try {
@@ -3171,16 +3361,16 @@ function registerDebugTools(tools) {
 // src/qrlogin.ts
 var import_qrcode = __toESM(require_qrcode(), 1);
 var import_svg_tag = __toESM(require_svg_tag(), 1);
-import { appendFileSync, mkdirSync as mkdirSync2 } from "node:fs";
-import { homedir as homedir3 } from "node:os";
-import { join as join3 } from "node:path";
-var TRACE_FILE = join3(homedir3(), ".dsh", "bili-danmaku-overlay", "qr-trace.log");
+import { appendFileSync as appendFileSync2, mkdirSync as mkdirSync3 } from "node:fs";
+import { homedir as homedir4 } from "node:os";
+import { join as join4 } from "node:path";
+var TRACE_FILE = join4(homedir4(), ".dsh", "bili-danmaku-overlay", "qr-trace.log");
 function writeTraceFile(record) {
   try {
-    mkdirSync2(join3(homedir3(), ".dsh", "bili-danmaku-overlay"), { recursive: true, mode: 448 });
+    mkdirSync3(join4(homedir4(), ".dsh", "bili-danmaku-overlay"), { recursive: true, mode: 448 });
     const last = record.trace[record.trace.length - 1];
     if (last === void 0) return;
-    appendFileSync(TRACE_FILE, `${JSON.stringify({ key: record.key, url: record.url, ...last })}
+    appendFileSync2(TRACE_FILE, `${JSON.stringify({ key: record.key, url: record.url, ...last })}
 `, {
       encoding: "utf8",
       mode: 384
@@ -3419,6 +3609,19 @@ async function route(request, response, config) {
   }
   if (path === "/api/qr-login/diagnostics" && request.method === "GET") {
     sendJson(response, 200, { ok: true, ...qrDiagnostics() });
+    return;
+  }
+  if (path === "/api/refresh-log" && request.method === "GET") {
+    const limit = Number.parseInt(url.searchParams.get("limit") ?? "", 10);
+    sendJson(response, 200, {
+      ok: true,
+      events: readRefreshLog(Number.isFinite(limit) && limit > 0 ? Math.min(limit, 200) : void 0)
+    });
+    return;
+  }
+  if (path === "/api/refresh" && request.method === "POST") {
+    const outcome = await refreshLogin(limits.requestTimeoutMs);
+    sendJson(response, 200, { ok: true, ...outcome });
     return;
   }
   if (path === "/api/qr-login" && request.method === "DELETE") {

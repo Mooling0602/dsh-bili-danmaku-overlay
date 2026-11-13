@@ -29,6 +29,20 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
+import { refreshLogin } from './refresh.ts'
+
+/**
+ * How long one renewal attempt stands before another is considered, in milliseconds.
+ *
+ * The status route is polled by the page, so without this every poll would ask Bilibili
+ * whether renewal is due. Six hours is longer than the advice the endpoint gives and short
+ * enough that a session renewed on one visit is still fresh on the next.
+ */
+const REFRESH_INTERVAL_MS = 6 * 60 * 60 * 1000
+
+/** When renewal was last attempted, so the check is not made on every poll. */
+let lastRefreshAttempt = 0
+
 import { CSRF_REF, SESSDATA_REF } from './config.ts'
 import { readLogin } from './store.ts'
 
@@ -316,6 +330,20 @@ export async function credentialStatus(timeoutMs = 0, preferCustomCredential = t
   }
   if (!hasSess) return { ...base, valid: 'no', code: 'missing' }
   if (timeoutMs <= 0) return base
+
+  // A scanned login can be renewed without the reader, and a refs credential cannot,
+  // because only the scanned store holds a refresh token. The attempt is made before the
+  // session check so a session that was about to lapse is judged on its replacement
+  // rather than on the token that is on its way out.
+  if (base.source === 'scanned' && Date.now() - lastRefreshAttempt >= REFRESH_INTERVAL_MS) {
+    lastRefreshAttempt = Date.now()
+    const outcome = await refreshLogin(timeoutMs)
+    if (outcome.renewed) {
+      const renewed = buildCookie(preferCustomCredential)
+      const session = await checkSession(renewed, timeoutMs)
+      return { ...base, hasCsrf: cookieValue(renewed, 'bili_jct') !== '', ...session }
+    }
+  }
 
   const session = await checkSession(cookie, timeoutMs)
   return { ...base, ...session }

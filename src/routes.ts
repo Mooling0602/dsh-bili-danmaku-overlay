@@ -11,6 +11,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { credentialStatus, BiliError } from './credentials.ts'
 import { pollQrLogin, qrDiagnostics, startQrLogin } from './qrlogin.ts'
+import { readRefreshLog } from './refreshlog.ts'
+import { refreshLogin } from './refresh.ts'
 import { clearLogin, readLogin } from './store.ts'
 import { fetchRoomStats, normalizeRoomInput, resolveRoom, sendDanmaku } from './bili.ts'
 import { streamDanmaku } from './stream.ts'
@@ -165,6 +167,24 @@ export async function route(
 
   if (path === '/api/qr-login/diagnostics' && request.method === 'GET') {
     sendJson(response, 200, { ok: true, ...qrDiagnostics() })
+    return
+  }
+
+  // A renewal the reader never sees is the one that most needs a record, because a
+  // session that quietly renewed and a renewal that quietly failed look identical from
+  // the page. The log holds which step ran and what it answered.
+  if (path === '/api/refresh-log' && request.method === 'GET') {
+    const limit = Number.parseInt(url.searchParams.get('limit') ?? '', 10)
+    sendJson(response, 200, {
+      ok: true,
+      events: readRefreshLog(Number.isFinite(limit) && limit > 0 ? Math.min(limit, 200) : undefined),
+    })
+    return
+  }
+
+  if (path === '/api/refresh' && request.method === 'POST') {
+    const outcome = await refreshLogin(limits.requestTimeoutMs)
+    sendJson(response, 200, { ok: true, ...outcome })
     return
   }
 
