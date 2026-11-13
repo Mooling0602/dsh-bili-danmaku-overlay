@@ -4,6 +4,9 @@
 
 在 DSH Web 界面里以常驻浮层显示 B 站直播间弹幕。浮层切换页面时不会卸载，可以一边干活一边看弹幕。
 
+[![dsh-badge](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+[![license-mit-badge](https://img.shields.io/github/license/Mooling0602/dsh-bili-danmaku-overlay?style=flat-square)](https://github.com/Mooling0602/dsh-bili-danmaku-overlay/blob/main/LICENSE)
+
 ## 功能
 
 - 实时弹幕，断线自动重连；实时连接不可用时自动回退到历史拉取

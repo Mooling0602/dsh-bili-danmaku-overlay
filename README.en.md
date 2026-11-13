@@ -4,6 +4,9 @@
 
 Shows Bilibili live-room danmaku in a floating overlay inside the DSH Web UI. The overlay stays mounted across page changes, so you can watch a room while you work.
 
+[![dsh-badge](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
+[![license-mit-badge](https://img.shields.io/github/license/Mooling0602/dsh-bili-danmaku-overlay?style=flat-square)](https://github.com/Mooling0602/dsh-bili-danmaku-overlay/blob/main/LICENSE)
+
 ## Features
 
 - Live danmaku with automatic reconnect, and a history fallback when the live socket is unavailable
