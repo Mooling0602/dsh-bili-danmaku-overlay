@@ -233,11 +233,18 @@ function gripStrokes(angle: number): string {
   return `linear-gradient(${angle}deg, transparent 45%, ${tone} 45%, ${tone} 55%, transparent 55%), linear-gradient(${angle}deg, transparent 68%, ${tone} 68%, ${tone} 78%, transparent 78%)`
 }
 
-/** The stroke direction for each moving corner, matching its resize axis. */
+/**
+ * The stroke direction for each moving corner, matching its resize axis.
+ *
+ * A gradient angle points at the end of its line, and the strokes sit in the stops past
+ * halfway, so they land on the side the line points at. The angle therefore names the
+ * corner itself: 45 is up and right, 135 down and right, 225 down and left, 315 up and
+ * left. The `window.tsx` grip uses the same mapping.
+ */
 const GRIP_STROKES = {
-  'below-left': gripStrokes(45),
+  'below-left': gripStrokes(225),
   'below-right': gripStrokes(135),
-  'above-left': gripStrokes(135),
+  'above-left': gripStrokes(315),
   'above-right': gripStrokes(45),
 } as const
 

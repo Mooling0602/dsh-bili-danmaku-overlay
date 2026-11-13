@@ -691,9 +691,9 @@ window.__ModuleLoader__.load({
         return `linear-gradient(${angle}deg, transparent 45%, ${tone} 45%, ${tone} 55%, transparent 55%), linear-gradient(${angle}deg, transparent 68%, ${tone} 68%, ${tone} 78%, transparent 78%)`;
       }
       var GRIP_STROKES = {
-        "below-left": gripStrokes(45),
+        "below-left": gripStrokes(225),
         "below-right": gripStrokes(135),
-        "above-left": gripStrokes(135),
+        "above-left": gripStrokes(315),
         "above-right": gripStrokes(45)
       };
       function CredentialRow({
