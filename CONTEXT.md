@@ -288,11 +288,22 @@ These encode user-visible decisions, and each one was a reported defect before i
 - **A minimized window shows the newest line in place of its title, then returns to the title.** A new danmaku resets the idle timer, and after `IDLE_FADE_MS` of quiet the title comes back. The title is the resting state because it names the room; the preview is transient because it is only worth reading while it is current. The preview is drawn in the same slot with a lighter weight and colour, so the card never changes height as the two states swap.
 - **A drag collapses the ball to a bare dot centred on the pointer**, with a 4px slop radius that separates a drag from a click. Release clamps the position to the safe area.
 - **The default corner is the top-right**, tracked through a resize listener rather than read once at render time.
+- **The ball's outer wrapper lays out no box (`display: contents`), and each of its children carries `z-index: 60` itself.** Both children are `position: fixed`, so the wrapper never contributed to their layout; it only provided their stacking context. dsh-go decides whether a slot outlet is occupied by measuring the outlet's direct children, and a zero-sized one reads as empty, so a 0×0 wrapper left the ball invisible in its native chat page. Moving `z-index` down to the children keeps the ball above `z-index: 59` windows and below the `70`/`71` dialogs, which is the order the wrapper used to impose.
 - **Button icons are inline SVG paths from `src/client/icons.tsx`, never characters.** A glyph such as `×`, `−` or `⟳` takes its shape, baseline and advance width from whatever font the page resolves, so the same button can sit off centre or change weight between machines. The paths are drawn on a fixed 16 unit grid and centred on it, size themselves from `1em`, and inherit `currentColor`, which is why a button only sets colour and font size.
 
 ### Copy
 
 `CopyKey` is a closed union and every key exists in both dictionaries. A component gets its strings from `t()`, never from a literal. `locale/*.json` holds only the listing `meta`; a runtime string placed there would render as a raw key because nothing reads those files at runtime.
+
+### Hosts other than the Web client
+
+The same Client bundle runs in two hosts, and the ball has to satisfy both.
+
+The Web client mounts `shell.overlay` as an outlet whose wrapper is `display: contents`, so the overlay's own returned element is what the host measures. Nothing measures it there; the layer simply paints.
+
+dsh-go renders that outlet inside a WebView and decides whether the slot is occupied before it shows the page. Its `rendered()` walks the outlet's direct element children: a child that computes to `display: contents` is descended into, and any other child counts only when its own rectangle has a non-zero width and height. A plugin root that is `position: fixed` with `width: 0; height: 0` therefore reads as an empty slot even when it draws a full ball, and the island stays on its loading state. Its touch-region reporter applies the same rule to the boxes it forwards to the native UI, so a zero-sized root also lets every touch through to the app behind.
+
+The consequence for this plugin is a rule rather than a workaround: **an element registered into `shell.overlay` must either draw a non-zero box or lay out no box at all.** `display: contents` is the correct shape for a wrapper like the ball's, whose children are fixed and positioned from state, and it is also what keeps the wrapper honest on the Web side, where it contributes no layout either way. What such a wrapper cannot carry is a `z-index`, so the children own their own stacking order.
 
 ## Routes
 

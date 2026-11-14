@@ -932,132 +932,243 @@ window.__ModuleLoader__.load({
           height: Math.round(pinnedHeight ?? menuHeightCap)
         };
         menuBoxRef.current = menuBox;
-        return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-          "div",
-          {
-            ref: rootRef,
-            style: {
-              position: "fixed",
-              left: 0,
-              top: 0,
-              width: 0,
-              height: 0,
-              zIndex: 60,
-              pointerEvents: "none"
-            },
-            children: [
-              props.open ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                "div",
-                {
-                  ref: menuRef,
-                  style: {
-                    position: "fixed",
-                    left: menuLeft,
-                    ...menuVertical,
-                    // The menu stays open while the ball is dragged so it travels with the
-                    // pointer instead of vanishing and reappearing somewhere else. Clicks are
-                    // switched off for the duration: the press belongs to the drag, and a
-                    // menu that kept taking clicks would swallow the gesture.
-                    pointerEvents: dragging ? "none" : "auto",
-                    width: menuBox.width,
-                    // A dragged height is a size rather than a ceiling, so it is pinned: the
-                    // reader grew the menu to hold more rooms, and one that shrank back to its
-                    // content the moment a room was removed would undo that choice. Until a
-                    // gesture happens there is no such choice to honour, so the menu keeps
-                    // sizing itself to its content and only the cap applies.
-                    ...pinnedHeight === null ? {} : { height: Math.round(pinnedHeight) },
-                    maxHeight: Math.round(menuHeightCap),
-                    display: "flex",
-                    flexDirection: "column",
-                    borderRadius: ds(12),
-                    border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))",
-                    background: "var(--dsw-alias-bg-overlay, #fff)",
-                    boxShadow: "0 10px 32px rgba(0,0,0,.18)",
-                    font: `${ds(12)}px/1.4 system-ui, -apple-system, sans-serif`,
-                    overflow: "hidden"
-                  },
-                  children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+        return (
+          // `display: contents` rather than a zero-sized fixed box: both children are
+          // fixed themselves, so this element contributes nothing to their layout
+          // either way, but dsh-go's island gate asks whether a slot outlet's direct
+          // children have a box and treats a zero-sized one as an empty slot. Laying
+          // out no box at all keeps the gate looking further in, where the ball is.
+          // The children carry the stacking order themselves now.
+          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { ref: rootRef, style: { display: "contents" }, children: [
+            props.open ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+              "div",
+              {
+                ref: menuRef,
+                style: {
+                  position: "fixed",
+                  zIndex: 60,
+                  left: menuLeft,
+                  ...menuVertical,
+                  // The menu stays open while the ball is dragged so it travels with the
+                  // pointer instead of vanishing and reappearing somewhere else. Clicks are
+                  // switched off for the duration: the press belongs to the drag, and a
+                  // menu that kept taking clicks would swallow the gesture.
+                  pointerEvents: dragging ? "none" : "auto",
+                  width: menuBox.width,
+                  // A dragged height is a size rather than a ceiling, so it is pinned: the
+                  // reader grew the menu to hold more rooms, and one that shrank back to its
+                  // content the moment a room was removed would undo that choice. Until a
+                  // gesture happens there is no such choice to honour, so the menu keeps
+                  // sizing itself to its content and only the cap applies.
+                  ...pinnedHeight === null ? {} : { height: Math.round(pinnedHeight) },
+                  maxHeight: Math.round(menuHeightCap),
+                  display: "flex",
+                  flexDirection: "column",
+                  borderRadius: ds(12),
+                  border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.28))",
+                  background: "var(--dsw-alias-bg-overlay, #fff)",
+                  boxShadow: "0 10px 32px rgba(0,0,0,.18)",
+                  font: `${ds(12)}px/1.4 system-ui, -apple-system, sans-serif`,
+                  overflow: "hidden"
+                },
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                    "div",
+                    {
+                      style: {
+                        padding: `${ds(9)}px ${ds(11)}px`,
+                        borderBottom: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))",
+                        fontSize: ds(12),
+                        fontWeight: 600,
+                        color: "var(--dsw-alias-label-primary, #222)"
+                      },
+                      children: t("rooms")
+                    }
+                  ),
+                  /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: `${ds(4)}px 0` }, children: [
+                    props.configuredRoom !== "" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
                       "div",
                       {
                         style: {
-                          padding: `${ds(9)}px ${ds(11)}px`,
-                          borderBottom: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))",
-                          fontSize: ds(12),
-                          fontWeight: 600,
-                          color: "var(--dsw-alias-label-primary, #222)"
+                          display: "flex",
+                          alignItems: "center",
+                          gap: ds(6),
+                          padding: `${ds(6)}px ${ds(11)}px`,
+                          borderBottom: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.14))"
                         },
-                        children: t("rooms")
+                        children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "span",
+                            {
+                              style: {
+                                width: ds(7),
+                                height: ds(7),
+                                borderRadius: 999,
+                                flex: "0 0 auto",
+                                // The configured room is pinned, not monitored, so it carries the
+                                // same tone a connected room would rather than a live colour it
+                                // has not earned.
+                                background: "var(--dsw-alias-label-tertiary, #999)"
+                              }
+                            }
+                          ),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                            "button",
+                            {
+                              type: "button",
+                              onClick: () => props.onAddRoom(props.configuredRoom),
+                              title: t("openRoom"),
+                              style: {
+                                flex: "1 1 auto",
+                                minWidth: 0,
+                                padding: 0,
+                                border: "none",
+                                background: "transparent",
+                                textAlign: "left",
+                                cursor: "pointer",
+                                color: "var(--dsw-alias-label-primary, #222)",
+                                font: "inherit",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap"
+                              },
+                              children: [
+                                t("configuredRoom"),
+                                " #",
+                                props.configuredRoom
+                              ]
+                            }
+                          )
+                        ]
                       }
-                    ),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", padding: `${ds(4)}px 0` }, children: [
-                      props.configuredRoom !== "" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                        "div",
-                        {
-                          style: {
-                            display: "flex",
-                            alignItems: "center",
-                            gap: ds(6),
-                            padding: `${ds(6)}px ${ds(11)}px`,
-                            borderBottom: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.14))"
-                          },
-                          children: [
-                            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                              "span",
-                              {
-                                style: {
-                                  width: ds(7),
-                                  height: ds(7),
-                                  borderRadius: 999,
-                                  flex: "0 0 auto",
-                                  // The configured room is pinned, not monitored, so it carries the
-                                  // same tone a connected room would rather than a live colour it
-                                  // has not earned.
-                                  background: "var(--dsw-alias-label-tertiary, #999)"
+                    ) : null,
+                    rooms.length === 0 && props.candidates.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                      "div",
+                      {
+                        style: {
+                          padding: `${ds(16)}px ${ds(12)}px`,
+                          textAlign: "center",
+                          color: "var(--dsw-alias-label-tertiary, #999)"
+                        },
+                        children: t("noRooms")
+                      }
+                    ) : rooms.map((room) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                      "div",
+                      {
+                        style: {
+                          display: "flex",
+                          alignItems: "center",
+                          gap: ds(6),
+                          padding: `${ds(6)}px ${ds(11)}px`
+                        },
+                        children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "span",
+                            {
+                              style: {
+                                width: ds(7),
+                                height: ds(7),
+                                borderRadius: 999,
+                                flex: "0 0 auto",
+                                background: stateTone(room.state)
+                              }
+                            }
+                          ),
+                          editing === room.key ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "input",
+                            {
+                              autoFocus: true,
+                              value: aliasDraft,
+                              onChange: (event) => setAliasDraft(event.target.value.slice(0, 40)),
+                              onBlur: () => {
+                                props.onRename(room.key, aliasDraft.trim());
+                                setEditing(null);
+                              },
+                              onKeyDown: (event) => {
+                                if (event.key === "Enter") {
+                                  props.onRename(room.key, aliasDraft.trim());
+                                  setEditing(null);
                                 }
+                                if (event.key === "Escape") setEditing(null);
+                              },
+                              placeholder: room.liveTitle || `#${room.room}`,
+                              style: {
+                                flex: "1 1 auto",
+                                minWidth: 0,
+                                padding: `${ds(2)}px ${ds(6)}px`,
+                                fontSize: ds(12),
+                                borderRadius: ds(6),
+                                border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                                background: "var(--dsw-alias-bg-layer-2, transparent)",
+                                color: "var(--dsw-alias-label-primary, #222)",
+                                outline: "none"
                               }
-                            ),
-                            /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                              "button",
-                              {
-                                type: "button",
-                                onClick: () => props.onAddRoom(props.configuredRoom),
-                                title: t("openRoom"),
-                                style: {
-                                  flex: "1 1 auto",
-                                  minWidth: 0,
-                                  padding: 0,
-                                  border: "none",
-                                  background: "transparent",
-                                  textAlign: "left",
-                                  cursor: "pointer",
-                                  color: "var(--dsw-alias-label-primary, #222)",
-                                  font: "inherit",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap"
-                                },
-                                children: [
-                                  t("configuredRoom"),
-                                  " #",
-                                  props.configuredRoom
-                                ]
-                              }
-                            )
-                          ]
-                        }
-                      ) : null,
-                      rooms.length === 0 && props.candidates.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            }
+                          ) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            "button",
+                            {
+                              type: "button",
+                              onClick: () => props.onShowWindow(room.key),
+                              title: t("showWindow"),
+                              style: {
+                                flex: "1 1 auto",
+                                minWidth: 0,
+                                padding: 0,
+                                border: "none",
+                                background: "transparent",
+                                textAlign: "left",
+                                cursor: "pointer",
+                                color: "var(--dsw-alias-label-primary, #222)",
+                                font: "inherit",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap"
+                              },
+                              children: room.alias || room.liveTitle || `#${room.room}`
+                            }
+                          ),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            IconButton,
+                            {
+                              label: room.view === "hidden" ? t("showWindow") : t("hideWindow"),
+                              scale: ds,
+                              onClick: () => {
+                                if (room.view === "hidden") props.onShowWindow(room.key);
+                                else props.onHideWindow(room.key);
+                              },
+                              children: room.view === "hidden" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ShowPanelIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(HidePanelIcon, {})
+                            }
+                          ),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            IconButton,
+                            {
+                              label: t("rename"),
+                              scale: ds,
+                              onClick: () => {
+                                setEditing(room.key);
+                                setAliasDraft(room.alias);
+                              },
+                              children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(EditIcon, {})
+                            }
+                          ),
+                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(IconButton, { label: t("removeRoom"), scale: ds, onClick: () => props.onRemove(room.key), children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {}) })
+                        ]
+                      },
+                      room.key
+                    )),
+                    reopenable.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
                         "div",
                         {
                           style: {
-                            padding: `${ds(16)}px ${ds(12)}px`,
-                            textAlign: "center",
+                            padding: `${ds(8)}px ${ds(11)}px ${ds(2)}px`,
+                            fontSize: ds(11),
                             color: "var(--dsw-alias-label-tertiary, #999)"
                           },
-                          children: t("noRooms")
+                          children: t("recentRooms")
                         }
-                      ) : rooms.map((room) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                      ),
+                      reopenable.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
                         "div",
                         {
                           style: {
@@ -1075,46 +1186,16 @@ window.__ModuleLoader__.load({
                                   height: ds(7),
                                   borderRadius: 999,
                                   flex: "0 0 auto",
-                                  background: stateTone(room.state)
+                                  background: "var(--dsw-alias-label-tertiary, #999)"
                                 }
                               }
                             ),
-                            editing === room.key ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                              "input",
-                              {
-                                autoFocus: true,
-                                value: aliasDraft,
-                                onChange: (event) => setAliasDraft(event.target.value.slice(0, 40)),
-                                onBlur: () => {
-                                  props.onRename(room.key, aliasDraft.trim());
-                                  setEditing(null);
-                                },
-                                onKeyDown: (event) => {
-                                  if (event.key === "Enter") {
-                                    props.onRename(room.key, aliasDraft.trim());
-                                    setEditing(null);
-                                  }
-                                  if (event.key === "Escape") setEditing(null);
-                                },
-                                placeholder: room.liveTitle || `#${room.room}`,
-                                style: {
-                                  flex: "1 1 auto",
-                                  minWidth: 0,
-                                  padding: `${ds(2)}px ${ds(6)}px`,
-                                  fontSize: ds(12),
-                                  borderRadius: ds(6),
-                                  border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                                  background: "var(--dsw-alias-bg-layer-2, transparent)",
-                                  color: "var(--dsw-alias-label-primary, #222)",
-                                  outline: "none"
-                                }
-                              }
-                            ) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
                               "button",
                               {
                                 type: "button",
-                                onClick: () => props.onShowWindow(room.key),
-                                title: t("showWindow"),
+                                onClick: () => props.onAddRoom(entry.room),
+                                title: t("openRoom"),
                                 style: {
                                   flex: "1 1 auto",
                                   minWidth: 0,
@@ -1123,347 +1204,261 @@ window.__ModuleLoader__.load({
                                   background: "transparent",
                                   textAlign: "left",
                                   cursor: "pointer",
-                                  color: "var(--dsw-alias-label-primary, #222)",
+                                  color: "var(--dsw-alias-label-secondary, #666)",
                                   font: "inherit",
                                   overflow: "hidden",
                                   textOverflow: "ellipsis",
                                   whiteSpace: "nowrap"
                                 },
-                                children: room.alias || room.liveTitle || `#${room.room}`
+                                children: entry.label || `#${entry.room}`
                               }
                             ),
                             /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
                               IconButton,
                               {
-                                label: room.view === "hidden" ? t("showWindow") : t("hideWindow"),
+                                label: t("forgetRoom"),
                                 scale: ds,
-                                onClick: () => {
-                                  if (room.view === "hidden") props.onShowWindow(room.key);
-                                  else props.onHideWindow(room.key);
-                                },
-                                children: room.view === "hidden" ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(ShowPanelIcon, {}) : /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(HidePanelIcon, {})
+                                onClick: () => props.onForgetRoom(entry.room),
+                                children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {})
                               }
-                            ),
-                            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                              IconButton,
-                              {
-                                label: t("rename"),
-                                scale: ds,
-                                onClick: () => {
-                                  setEditing(room.key);
-                                  setAliasDraft(room.alias);
-                                },
-                                children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(EditIcon, {})
-                              }
-                            ),
-                            /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(IconButton, { label: t("removeRoom"), scale: ds, onClick: () => props.onRemove(room.key), children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {}) })
+                            )
                           ]
                         },
-                        room.key
-                      )),
-                      reopenable.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_jsx_runtime2.Fragment, { children: [
+                        entry.room
+                      ))
+                    ] }) : null
+                  ] }),
+                  /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                    CredentialRow,
+                    {
+                      credential: props.credential,
+                      ds,
+                      t: props.t,
+                      onPress: props.onCredentialClick
+                    }
+                  ),
+                  /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                    "div",
+                    {
+                      style: {
+                        display: "flex",
+                        gap: ds(6),
+                        padding: `${ds(8)}px ${ds(11)}px`,
+                        borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
+                      },
+                      children: [
                         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                          "div",
+                          "input",
                           {
-                            style: {
-                              padding: `${ds(8)}px ${ds(11)}px ${ds(2)}px`,
-                              fontSize: ds(11),
-                              color: "var(--dsw-alias-label-tertiary, #999)"
+                            value: draft,
+                            onChange: (event) => setDraft(event.target.value),
+                            onKeyDown: (event) => {
+                              if (event.key !== "Enter") return;
+                              props.onAddRoom(draft.trim());
+                              setDraft("");
                             },
-                            children: t("recentRooms")
+                            placeholder: t("roomPlaceholder"),
+                            inputMode: "numeric",
+                            style: {
+                              flex: "1 1 auto",
+                              minWidth: 0,
+                              padding: `${ds(4)}px ${ds(8)}px`,
+                              fontSize: ds(12),
+                              borderRadius: ds(7),
+                              border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                              background: "var(--dsw-alias-bg-layer-2, transparent)",
+                              color: "var(--dsw-alias-label-primary, #222)",
+                              outline: "none"
+                            }
                           }
                         ),
-                        reopenable.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                          "div",
+                        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                          "button",
+                          {
+                            type: "button",
+                            onClick: () => {
+                              props.onAddRoom(draft.trim());
+                              setDraft("");
+                            },
+                            style: {
+                              flex: "0 0 auto",
+                              padding: `${ds(4)}px ${ds(10)}px`,
+                              fontSize: ds(12),
+                              borderRadius: ds(7),
+                              border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                              background: "transparent",
+                              color: "var(--dsw-alias-label-primary, #222)",
+                              cursor: "pointer",
+                              whiteSpace: "nowrap"
+                            },
+                            children: t("addRoom")
+                          }
+                        )
+                      ]
+                    }
+                  ),
+                  rooms.length > 1 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                    "div",
+                    {
+                      style: {
+                        display: "flex",
+                        gap: ds(6),
+                        padding: `0 ${ds(11)}px ${ds(9)}px`
+                      },
+                      children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { label: t("showWindow"), onClick: props.onShowAll, scale: ds }),
+                        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { label: t("ungroupAll"), onClick: props.onHideAll, scale: ds })
+                      ]
+                    }
+                  ) : null,
+                  /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                    "div",
+                    {
+                      onPointerDown: onMenuResizeDown(side),
+                      onPointerMove: onMenuResizeMove(side, below),
+                      onPointerUp: onMenuResizeUp,
+                      onPointerCancel: onMenuResizeUp,
+                      title: t("resizeHint"),
+                      style: {
+                        position: "absolute",
+                        ...below ? { bottom: 0 } : { top: 0 },
+                        ...side === "left" ? { left: 0 } : { right: 0 },
+                        width: ds(14),
+                        height: ds(14),
+                        // The cursor names the direction the free corner travels in.
+                        cursor: GRIP_CURSOR[`${below ? "below" : "above"}-${side}`],
+                        touchAction: "none",
+                        background: GRIP_STROKES[`${below ? "below" : "above"}-${side}`]
+                      }
+                    }
+                  )
+                ]
+              }
+            ) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+              "button",
+              {
+                type: "button",
+                onPointerDown,
+                onPointerMove,
+                onPointerUp,
+                onPointerEnter: wake,
+                title: t("manage"),
+                style: {
+                  // The pill always stays on the dot's own edge and grows outwards into the
+                  // roomier half, so the summary never runs off screen.
+                  position: "fixed",
+                  zIndex: 60,
+                  ...side === "left" ? { right: viewport.w - anchor.x - size } : { left: anchor.x },
+                  top: anchor.y,
+                  pointerEvents: "auto",
+                  display: "flex",
+                  alignItems: "center",
+                  // The pill is anchored by the edge nearest the screen border, so the dot
+                  // must sit on that same edge (`row-reverse` puts the first child last):
+                  // otherwise the summary grows between the icon and the border and pushes
+                  // the icon halfway across the pill.
+                  flexDirection: side === "left" ? "row-reverse" : "row",
+                  gap: expanded ? bs(8) : 0,
+                  height: size,
+                  // A pill that would run past the edge is clamped to the safe area, which
+                  // keeps the summary readable on a phone instead of clipping it.
+                  maxWidth: side === "left" ? Math.max(size, anchor.x + size - SAFE) : Math.max(size, viewport.w - SAFE - anchor.x),
+                  minWidth: size,
+                  // No padding on the icon's side: the glyph is already centred inside a
+                  // full `size` box, so its own letterboxing is the gap to the pill edge.
+                  // Only the summary needs breathing room against the rounded end.
+                  padding: expanded ? side === "left" ? `0 0 0 ${bs(14)}px` : `0 ${bs(14)}px 0 0` : 0,
+                  borderRadius: 999,
+                  border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
+                  background: "var(--dsw-alias-bg-overlay, #fff)",
+                  boxShadow: dragging ? "0 10px 26px rgba(0,0,0,.28)" : "0 6px 22px rgba(0,0,0,.16)",
+                  cursor: dragging ? "grabbing" : "grab",
+                  overflow: "hidden",
+                  touchAction: "none",
+                  userSelect: "none",
+                  transition: dragging ? "none" : "padding 160ms ease, gap 160ms ease"
+                },
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                    "span",
+                    {
+                      style: {
+                        position: "relative",
+                        flex: "0 0 auto",
+                        width: size,
+                        height: size,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      },
+                      children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TvMark, { size: Math.round(size * 0.56), color: "var(--dsw-alias-label-primary, #222)" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                          "span",
                           {
                             style: {
-                              display: "flex",
-                              alignItems: "center",
-                              gap: ds(6),
-                              padding: `${ds(6)}px ${ds(11)}px`
+                              position: "absolute",
+                              right: Math.round(size * 0.12),
+                              bottom: Math.round(size * 0.12),
+                              width: 9,
+                              height: 9,
+                              borderRadius: 999,
+                              background: stateTone(state),
+                              border: "2px solid var(--dsw-alias-bg-overlay, #fff)"
+                            }
+                          }
+                        )
+                      ]
+                    }
+                  ),
+                  expanded ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
+                    "span",
+                    {
+                      style: {
+                        minWidth: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 1,
+                        // The summary is the ball's own label, so it follows the ball: a larger
+                        // dot carries a larger summary, and the two always look like one object.
+                        // The ratio is taken against the default diameter, which keeps a default
+                        // ball drawing its text at the size it was designed for.
+                        font: `${Math.max(9, bs(12))}px/1.25 system-ui, -apple-system, sans-serif`
+                      },
+                      children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                          "span",
+                          {
+                            style: {
+                              maxWidth: bs(210),
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              color: "var(--dsw-alias-label-secondary, #888)",
+                              fontSize: Math.max(9, bs(11))
                             },
-                            children: [
-                              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                                "span",
-                                {
-                                  style: {
-                                    width: ds(7),
-                                    height: ds(7),
-                                    borderRadius: 999,
-                                    flex: "0 0 auto",
-                                    background: "var(--dsw-alias-label-tertiary, #999)"
-                                  }
-                                }
-                              ),
-                              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                                "button",
-                                {
-                                  type: "button",
-                                  onClick: () => props.onAddRoom(entry.room),
-                                  title: t("openRoom"),
-                                  style: {
-                                    flex: "1 1 auto",
-                                    minWidth: 0,
-                                    padding: 0,
-                                    border: "none",
-                                    background: "transparent",
-                                    textAlign: "left",
-                                    cursor: "pointer",
-                                    color: "var(--dsw-alias-label-secondary, #666)",
-                                    font: "inherit",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap"
-                                  },
-                                  children: entry.label || `#${entry.room}`
-                                }
-                              ),
-                              /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                                IconButton,
-                                {
-                                  label: t("forgetRoom"),
-                                  scale: ds,
-                                  onClick: () => props.onForgetRoom(entry.room),
-                                  children: /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(CloseIcon, {})
-                                }
-                              )
-                            ]
-                          },
-                          entry.room
-                        ))
-                      ] }) : null
-                    ] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                      CredentialRow,
-                      {
-                        credential: props.credential,
-                        ds,
-                        t: props.t,
-                        onPress: props.onCredentialClick
-                      }
-                    ),
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                      "div",
-                      {
-                        style: {
-                          display: "flex",
-                          gap: ds(6),
-                          padding: `${ds(8)}px ${ds(11)}px`,
-                          borderTop: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.2))"
-                        },
-                        children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            "input",
-                            {
-                              value: draft,
-                              onChange: (event) => setDraft(event.target.value),
-                              onKeyDown: (event) => {
-                                if (event.key !== "Enter") return;
-                                props.onAddRoom(draft.trim());
-                                setDraft("");
-                              },
-                              placeholder: t("roomPlaceholder"),
-                              inputMode: "numeric",
-                              style: {
-                                flex: "1 1 auto",
-                                minWidth: 0,
-                                padding: `${ds(4)}px ${ds(8)}px`,
-                                fontSize: ds(12),
-                                borderRadius: ds(7),
-                                border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                                background: "var(--dsw-alias-bg-layer-2, transparent)",
-                                color: "var(--dsw-alias-label-primary, #222)",
-                                outline: "none"
-                              }
-                            }
-                          ),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            "button",
-                            {
-                              type: "button",
-                              onClick: () => {
-                                props.onAddRoom(draft.trim());
-                                setDraft("");
-                              },
-                              style: {
-                                flex: "0 0 auto",
-                                padding: `${ds(4)}px ${ds(10)}px`,
-                                fontSize: ds(12),
-                                borderRadius: ds(7),
-                                border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                                background: "transparent",
-                                color: "var(--dsw-alias-label-primary, #222)",
-                                cursor: "pointer",
-                                whiteSpace: "nowrap"
-                              },
-                              children: t("addRoom")
-                            }
-                          )
-                        ]
-                      }
-                    ),
-                    rooms.length > 1 ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                      "div",
-                      {
-                        style: {
-                          display: "flex",
-                          gap: ds(6),
-                          padding: `0 ${ds(11)}px ${ds(9)}px`
-                        },
-                        children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { label: t("showWindow"), onClick: props.onShowAll, scale: ds }),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TextButton, { label: t("ungroupAll"), onClick: props.onHideAll, scale: ds })
-                        ]
-                      }
-                    ) : null,
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                      "div",
-                      {
-                        onPointerDown: onMenuResizeDown(side),
-                        onPointerMove: onMenuResizeMove(side, below),
-                        onPointerUp: onMenuResizeUp,
-                        onPointerCancel: onMenuResizeUp,
-                        title: t("resizeHint"),
-                        style: {
-                          position: "absolute",
-                          ...below ? { bottom: 0 } : { top: 0 },
-                          ...side === "left" ? { left: 0 } : { right: 0 },
-                          width: ds(14),
-                          height: ds(14),
-                          // The cursor names the direction the free corner travels in.
-                          cursor: GRIP_CURSOR[`${below ? "below" : "above"}-${side}`],
-                          touchAction: "none",
-                          background: GRIP_STROKES[`${below ? "below" : "above"}-${side}`]
-                        }
-                      }
-                    )
-                  ]
-                }
-              ) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                "button",
-                {
-                  type: "button",
-                  onPointerDown,
-                  onPointerMove,
-                  onPointerUp,
-                  onPointerEnter: wake,
-                  title: t("manage"),
-                  style: {
-                    // The pill always stays on the dot's own edge and grows outwards into the
-                    // roomier half, so the summary never runs off screen.
-                    position: "fixed",
-                    ...side === "left" ? { right: viewport.w - anchor.x - size } : { left: anchor.x },
-                    top: anchor.y,
-                    pointerEvents: "auto",
-                    display: "flex",
-                    alignItems: "center",
-                    // The pill is anchored by the edge nearest the screen border, so the dot
-                    // must sit on that same edge (`row-reverse` puts the first child last):
-                    // otherwise the summary grows between the icon and the border and pushes
-                    // the icon halfway across the pill.
-                    flexDirection: side === "left" ? "row-reverse" : "row",
-                    gap: expanded ? bs(8) : 0,
-                    height: size,
-                    // A pill that would run past the edge is clamped to the safe area, which
-                    // keeps the summary readable on a phone instead of clipping it.
-                    maxWidth: side === "left" ? Math.max(size, anchor.x + size - SAFE) : Math.max(size, viewport.w - SAFE - anchor.x),
-                    minWidth: size,
-                    // No padding on the icon's side: the glyph is already centred inside a
-                    // full `size` box, so its own letterboxing is the gap to the pill edge.
-                    // Only the summary needs breathing room against the rounded end.
-                    padding: expanded ? side === "left" ? `0 0 0 ${bs(14)}px` : `0 ${bs(14)}px 0 0` : 0,
-                    borderRadius: 999,
-                    border: "1px solid var(--dsw-alias-border-l1, rgba(127,127,127,.32))",
-                    background: "var(--dsw-alias-bg-overlay, #fff)",
-                    boxShadow: dragging ? "0 10px 26px rgba(0,0,0,.28)" : "0 6px 22px rgba(0,0,0,.16)",
-                    cursor: dragging ? "grabbing" : "grab",
-                    overflow: "hidden",
-                    touchAction: "none",
-                    userSelect: "none",
-                    transition: dragging ? "none" : "padding 160ms ease, gap 160ms ease"
-                  },
-                  children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                      "span",
-                      {
-                        style: {
-                          position: "relative",
-                          flex: "0 0 auto",
-                          width: size,
-                          height: size,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center"
-                        },
-                        children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(TvMark, { size: Math.round(size * 0.56), color: "var(--dsw-alias-label-primary, #222)" }),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            "span",
-                            {
-                              style: {
-                                position: "absolute",
-                                right: Math.round(size * 0.12),
-                                bottom: Math.round(size * 0.12),
-                                width: 9,
-                                height: 9,
-                                borderRadius: 999,
-                                background: stateTone(state),
-                                border: "2px solid var(--dsw-alias-bg-overlay, #fff)"
-                              }
-                            }
-                          )
-                        ]
-                      }
-                    ),
-                    expanded ? /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
-                      "span",
-                      {
-                        style: {
-                          minWidth: 0,
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-start",
-                          gap: 1,
-                          // The summary is the ball's own label, so it follows the ball: a larger
-                          // dot carries a larger summary, and the two always look like one object.
-                          // The ratio is taken against the default diameter, which keeps a default
-                          // ball drawing its text at the size it was designed for.
-                          font: `${Math.max(9, bs(12))}px/1.25 system-ui, -apple-system, sans-serif`
-                        },
-                        children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            "span",
-                            {
-                              style: {
-                                maxWidth: bs(210),
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                color: "var(--dsw-alias-label-secondary, #888)",
-                                fontSize: Math.max(9, bs(11))
-                              },
-                              children: newest ? `${newest.user}：${summarise(newest.text)}` : t("waitingNew")
-                            }
-                          ),
-                          /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
-                            "span",
-                            {
-                              style: {
-                                color: "var(--dsw-alias-label-primary, #222)",
-                                fontSize: Math.max(9, bs(12))
-                              },
-                              children: rooms.length === 0 ? t("noRooms") : `${rooms.length} ${t("roomCount")}`
-                            }
-                          )
-                        ]
-                      }
-                    ) : null
-                  ]
-                }
-              )
-            ]
-          }
+                            children: newest ? `${newest.user}：${summarise(newest.text)}` : t("waitingNew")
+                          }
+                        ),
+                        /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
+                          "span",
+                          {
+                            style: {
+                              color: "var(--dsw-alias-label-primary, #222)",
+                              fontSize: Math.max(9, bs(12))
+                            },
+                            children: rooms.length === 0 ? t("noRooms") : `${rooms.length} ${t("roomCount")}`
+                          }
+                        )
+                      ]
+                    }
+                  ) : null
+                ]
+              }
+            )
+          ] })
         );
       }
       function newestRow(rooms) {

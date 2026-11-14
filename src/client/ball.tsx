@@ -703,23 +703,19 @@ export function FloatingBall(props: BallProps) {
   menuBoxRef.current = menuBox
 
   return (
-    <div
-      ref={rootRef}
-      style={{
-        position: 'fixed',
-        left: 0,
-        top: 0,
-        width: 0,
-        height: 0,
-        zIndex: 60,
-        pointerEvents: 'none',
-      }}
-    >
+    // `display: contents` rather than a zero-sized fixed box: both children are
+    // fixed themselves, so this element contributes nothing to their layout
+    // either way, but dsh-go's island gate asks whether a slot outlet's direct
+    // children have a box and treats a zero-sized one as an empty slot. Laying
+    // out no box at all keeps the gate looking further in, where the ball is.
+    // The children carry the stacking order themselves now.
+    <div ref={rootRef} style={{ display: 'contents' }}>
       {props.open ? (
         <div
           ref={menuRef}
           style={{
             position: 'fixed',
+            zIndex: 60,
             left: menuLeft,
             ...menuVertical,
             // The menu stays open while the ball is dragged so it travels with the
@@ -1086,6 +1082,7 @@ export function FloatingBall(props: BallProps) {
           // The pill always stays on the dot's own edge and grows outwards into the
           // roomier half, so the summary never runs off screen.
           position: 'fixed',
+          zIndex: 60,
           ...(side === 'left'
             ? { right: viewport.w - anchor.x - size }
             : { left: anchor.x }),
