@@ -249,6 +249,34 @@ const GRIP_STROKES = {
 } as const
 
 /**
+ * Keep a point far enough from every edge for the ball at that point to fit.
+ *
+ * The stored point is a pair of coordinates with no viewport attached to it, so it
+ * has to be interpreted against the viewport in force when it is read. Clamping
+ * here is what makes a position recorded on a large screen usable on a small one:
+ * the ball lands inside the safe area instead of outside it.
+ *
+ * When the viewport cannot hold the ball plus both margins, the lower bound wins
+ * and the point is pinned to the top left safe corner. That case only arises on a
+ * viewport narrower than the ball itself, where no position is fully visible.
+ *
+ * @param at - the stored or default point, in viewport coordinates.
+ * @param size - the ball's diameter in pixels.
+ * @param viewport - the viewport the point is being interpreted against.
+ * @returns the point moved inside the safe area, unchanged when it already is.
+ */
+function clampPoint(
+  at: { readonly x: number; readonly y: number },
+  size: number,
+  viewport: { readonly w: number; readonly h: number },
+): { x: number; y: number } {
+  return {
+    x: Math.max(SAFE, Math.min(at.x, Math.max(SAFE, viewport.w - size - SAFE))),
+    y: Math.max(SAFE, Math.min(at.y, Math.max(SAFE, viewport.h - size - SAFE))),
+  }
+}
+
+/**
  * One line reporting the stored login.
  *
  * The distinction this row exists to draw is between a credential that is present
@@ -627,7 +655,13 @@ export function FloatingBall(props: BallProps) {
 
   // The ball's own point, resolved once so the menu and the dot agree on a side.
   // First run parks the ball in the top-right corner, out of the reading column.
-  const anchor = at ?? { x: viewport.w - size - SAFE, y: SAFE }
+  //
+  // A stored point is clamped rather than trusted, because the viewport that
+  // produced it is not necessarily the one it is read in. The point survives a
+  // reload and follows the reader across documents and screen sizes, so a ball
+  // dragged to the right edge of a wide window would render past the edge of a
+  // narrow one, where it can neither be seen nor dragged back.
+  const anchor = clampPoint(at ?? { x: viewport.w - size - SAFE, y: SAFE }, size, viewport)
   const side = unfold(anchor)
   // Dragging must not fight the pointer with a transition, and a dragged ball is
   // always the bare dot: a 280px pill under the finger would obscure what it is

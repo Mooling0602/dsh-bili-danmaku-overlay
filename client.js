@@ -696,6 +696,12 @@ window.__ModuleLoader__.load({
         "above-left": gripStrokes(315),
         "above-right": gripStrokes(45)
       };
+      function clampPoint(at, size, viewport) {
+        return {
+          x: Math.max(SAFE, Math.min(at.x, Math.max(SAFE, viewport.w - size - SAFE))),
+          y: Math.max(SAFE, Math.min(at.y, Math.max(SAFE, viewport.h - size - SAFE)))
+        };
+      }
       function CredentialRow({
         credential,
         ds,
@@ -912,7 +918,7 @@ window.__ModuleLoader__.load({
           idleTimer.current = window.setTimeout(() => setIdle(true), IDLE_FADE_MS);
         }, []);
         const collapse = idle && !props.open;
-        const anchor = at ?? { x: viewport.w - size - SAFE, y: SAFE };
+        const anchor = clampPoint(at ?? { x: viewport.w - size - SAFE, y: SAFE }, size, viewport);
         const side = unfold(anchor);
         const expanded = !collapse && !dragging;
         const preferred = props.menuBox ?? DEFAULT_MENU_BOX;
