@@ -40,6 +40,7 @@ The split matters in practice: a Host change reaches the running process after a
 | `src/client/notices.ts` | Turns a credential condition into the notice that describes it. Words each Host reported code from the dictionaries and falls back to the Host's own sentence for a code this build does not know. |
 | `src/client/qrdialog.tsx` | The QR sign-in surface: draws the code the Host produced, counts it down, polls until it resolves, and then reports the account it signed in as. |
 | `src/client/config-page.tsx` | The plugin settings page, including the 前端设置 block at the end of its form that edits the browser-owned ball size. |
+| `src/client/icons.tsx` | The inline SVG icon set. Every button glyph comes from here, never from a character. |
 | `src/client/copy.ts` | The `zh` and `en` dictionaries and the `CopyKey` union. |
 | `src/client/index.tsx` | Registers the overlay into `shell.overlay` and the settings page into `plugins.bundle.config`. |
 | `build.mjs` | esbuild: `src/client/index.tsx` to `client.js` (IIFE), `host.ts` to `index.js` (ESM). |
@@ -58,7 +59,7 @@ npm run build      # node build.mjs
 npm run typecheck  # tsc --noEmit, must print nothing
 ```
 
-- `client.js` is an IIFE. Its global name is derived from the package name (`__dsh_` plus the name with non-alphanumerics stripped), so two bundles cannot collide.
+- `client.js` is an IIFE wrapped in a `window.__ModuleLoader__.load({ id, factory })` registration, so the Host loads it by package name. Inside the factory the bundle's global name is derived from that name (`__dsh_` plus the name with non-alphanumerics replaced by `_`), so two bundles cannot collide.
 - `index.js` is ESM and keeps `@deepseek-ai/schemastery` and `@deepseek-ai/cordis` external. `schemastery` must stay external because the settings system recognises a schema by class identity, and an inlined copy would be a different class with the same shape.
 - The Client bundle currently requires exactly three specifiers at runtime: `react`, `react/jsx-runtime` and `@deepseek-ai/dsh-client-ui-primitives`. The rest of `CLIENT_EXTERNAL` in `build.mjs` is listed for the type imports that produce no `require`. Check the truth with `grep -o 'require("[^"]*")' client.js` after a build.
 - `tsconfig.json` sets `erasableSyntaxOnly`, so no `enum`, no `namespace` and no constructor parameter properties. It also sets `verbatimModuleSyntax`, so a type-only import needs `import type`, and `noUnusedLocals` plus `noUnusedParameters`, so an unused binding fails the type check.
@@ -122,7 +123,7 @@ Presence and validity are separate facts. `credentialStatus` reports the flags f
 
 A scanned login renews itself, and a refs credential does not. Only the scanned store holds a `refresh_token`, because the sign-in response is the only place one is issued and the refs section has no field for it. That asymmetry is the whole reason the setting exists: a session this plugin obtained can be kept alive without the reader, while a hand-written token cannot, and pretending otherwise would either rotate a token the plugin does not own or silently do nothing.
 
-**Renewal runs inside `credentialStatus`, before the session check, and only when `source` is `scanned`.** Being inside the status call means it runs when the reader is looking at the credential anyway, rather than on a timer that would spend requests while nobody is watching. Being before the check means a session that was about to lapse is judged on its replacement instead of on the token on its way out. `REFRESH_INTERVAL_MS` caps it at one attempt per six hours in the process, because the page polls that route and without a cap every poll would ask Bilibili whether renewal is due.
+**Renewal runs inside `credentialStatus`, before the session check, and only when `source` is `scanned`.** Being inside the status call means it runs when the reader is looking at the credential anyway, rather than on a timer that would spend requests while nobody is watching. Being before the check means a session that was about to lapse is judged on its replacement instead of on the token on its way out. `REFRESH_INTERVAL_MS` in `src/credentials.ts` caps it at one attempt per six hours in the process, because the page polls that route and without a cap every poll would ask Bilibili whether renewal is due.
 
 **The sequence is four calls and their order is not free.** `cookie/info?csrf=<bili_jct>` is an advisory check and a `false` answer means stop; renewing anyway would rotate a token that did not need rotating. `CorrespondPath` is RSA-OAEP with SHA-256 over the ASCII of `refresh_<ms>`, encrypted to the key Bilibili's own web client publishes, then written as lowercase base16. `GET www.bilibili.com/correspond/1/<path>` returns an SSR page whose `div id="1-name"` text is the `refresh_csrf`; the surrounding markup is present and has to be cut away, so the token is read out of that element rather than out of the page text. `POST cookie/refresh` then takes `csrf`, `refresh_csrf`, `source=main_web` and the old `refresh_token`, and returns a new session in `Set-Cookie` plus a new `refresh_token` in the body.
 
@@ -264,7 +265,7 @@ The veil reads `instance.state === 'offline'`, the same value the status dot use
 
 ### The status dot
 
-The dot's `<span>` carries a `title`, which is the browser's own tooltip. The colour is the state's tone and the text says which of the five situations the room is in, because two of them share a tone.
+The dot's `<span>` carries a `title`, which is the browser's own tooltip. The colour is the state's tone and the text says which of the six situations the room is in, because three of them share a tone.
 
 | Situation | `state` | Dot | Tooltip |
 | --- | --- | --- | --- |
@@ -313,6 +314,13 @@ Everything is mounted under `/bili-danmaku-overlay`.
 | --- | --- |
 | `GET /api/config` | The projected config plus `boot`. |
 | `GET /api/credential` | Whether a login is configured and whether Bilibili still accepts it, never the credential itself. |
+| `POST /api/qr-login/start` | Opens a QR sign-in session and returns the code to draw. |
+| `GET /api/qr-login/poll` | Polls that session until it resolves. |
+| `GET /api/qr-login/diagnostics` | What the Host recorded about the current sign-in session, for debugging. |
+| `DELETE /api/qr-login` | Drops the session the Host holds. |
+| `GET /api/refresh-log` | The newest records from `~/.dsh/bili-danmaku-overlay/refresh.log`. |
+| `POST /api/refresh` | Forces one renewal attempt, which is how the later steps can be seen before a session comes due. |
+| `GET /api/room?room=` | Resolves a short id to the real room id and reports its title and streamer. |
 | `GET /api/events?room=` | The event stream for one room. Any room id is accepted. |
 | `GET /api/history?room=` | Recent history for one room. |
 | `GET /api/stats?room=` | The room's live stats. |

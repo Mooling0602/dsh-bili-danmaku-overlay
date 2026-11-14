@@ -2,10 +2,15 @@
 
 [简体中文](README.md) | English
 
-Shows Bilibili live-room danmaku in a floating overlay inside the DSH Web UI. The overlay stays mounted across page changes, so you can watch a room while you work.
-
 [![dsh-badge](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 [![license-mit-badge](https://img.shields.io/github/license/Mooling0602/dsh-bili-danmaku-overlay?style=flat-square)](https://github.com/Mooling0602/dsh-bili-danmaku-overlay/blob/main/LICENSE)
+
+Shows Bilibili live-room danmaku in a floating overlay inside the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI (`dsh web`). The overlay stays mounted across page changes, so you can watch a room while you work.
+
+> [!TIP]
+> This plugin is designed for the dsh web UI, but it also tries to support downstream projects that belong neither to [deepseek-ai](https://github.com/deepseek-ai) nor to dsh, such as [dsh-Go](https://github.com/ccch1mneyyy/dsh-Go).
+>
+> You can report compatibility problems with a project built on dsh, and the maintainer will improve the plugin whenever a fix works for both the official dsh and that project. The plugin makes no compatibility statement about any other project, so ignore any notice or warning on the subject if the plugin works there.
 
 ## Features
 
@@ -23,9 +28,11 @@ Shows Bilibili live-room danmaku in a floating overlay inside the DSH Web UI. Th
 dsh plugin --profile web add github:Mooling0602/dsh-bili-danmaku-overlay
 ```
 
+When you install through the graphical interface, you only need to enter `github:Mooling0602/dsh-bili-danmaku-overlay` and confirm it.
+
 Restart dsh after installing. The package carries its own `cordis.patch.yml`, so dsh inserts the plugin into the bundle by itself. It also ships built JavaScript, so installation needs no compiler step.
 
-Then open the plugin settings page and set `defaultRoom` to the room you want to watch.
+Then click the small television overlay to use the plugin. The plugin settings page holds the finer preferences.
 
 To uninstall:
 
@@ -34,6 +41,11 @@ dsh plugin --profile web remove dsh-bili-danmaku-overlay
 ```
 
 ## Credentials
+
+> [!WARNING]
+> The login is stored on the dsh host rather than in the browser.
+>
+> Use this plugin only on a dsh instance that belongs to you alone. If it does not, this plugin is not recommended.
 
 There are two ways to sign in, and either one is enough. Scanning a QR code is the one to reach for.
 
@@ -78,6 +90,9 @@ Every option is editable on the plugin settings page and applies immediately.
 
 The Front-end settings block on the configuration page is stored in the browser only and never written to the dsh configuration. A slider takes effect immediately.
 
+> [!IMPORTANT]
+> These values are adjustable only from the official dsh web UI, through the controls that block shows.
+
 | Option | Range | Default |
 | --- | --- | --- |
 | Ball diameter | 32-96px | 48px |
@@ -92,8 +107,9 @@ The reset button at the top right of the block restores the ball diameter, the w
 
 ## Notes
 
-- The viewer count is a real head count, not the popularity score some Bilibili endpoints report.
-- Hover the status dot in a window's top left corner to read the exact state: not live, connection failed, reading history danmaku, or connected.
+- The number in a danmaku window's title bar is the real live viewer count.
+- Hover the status dot in a window's top left corner to read the exact state: not live, connection failed, reading history danmaku, connected, or not connected. A room that is not live says "not live (viewing danmaku)" once its danmaku are revealed.
+- If no history danmaku appear on the first connection to a room, try a manual refresh. A room that has not streamed for a long time and has no new danmaku may still say "the streamer is not live yet".
 
 ## Development
 
@@ -106,6 +122,16 @@ npm run typecheck
 
 Rebuild after editing `src/`. `client.js` reaches the page on a refresh; `index.js` is the Host half and needs `dsh` restarted.
 
+Once the plugin starts publishing releases, the JavaScript files will leave the Git repository, and a prebuilt copy or a local build will be needed (your call how to arrange it).
+
 ## License
 
 MIT
+
+## Disclaimer
+
+Every endpoint this plugin uses is a public endpoint of [Bilibili](https://www.bilibili.com), and the plugin collects nothing and uploads nothing to any additional server. If you find a security problem, report it in [Issues](https://github.com/Mooling0602/dsh-bili-danmaku-overlay/issues) or by the email address on the maintainer's GitHub profile, whichever fits.
+
+This plugin **will not manage credentials for multiple accounts, to keep the abuse side of the industry from having an easy target**. Keep your own credentials safe while you use it, and if one leaks, sign the unexpected device out of the account.
+
+Sending danmaku through the plugin is designed for a human user operating the graphical front end. Anyone who abuses it by attaching another plugin or external software, modifying the source, or loading custom code carries the consequences themselves, and the maintainer takes no responsibility for it.

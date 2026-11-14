@@ -2,10 +2,15 @@
 
 简体中文 | [English](README.en.md)
 
-在 DSH Web 界面里以常驻浮层显示 B 站直播间弹幕。浮层切换页面时不会卸载，可以一边干活一边看弹幕。
-
 [![dsh-badge](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)
 [![license-mit-badge](https://img.shields.io/github/license/Mooling0602/dsh-bili-danmaku-overlay?style=flat-square)](https://github.com/Mooling0602/dsh-bili-danmaku-overlay/blob/main/LICENSE)
+
+在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web 界面（`dsh web`）里以常驻浮层显示 B 站直播间弹幕。浮层切换页面时不会卸载，可以一边干活一边看弹幕。
+
+> [!TIP]
+> 本插件是为 dsh 的 web 界面设计的，但也尽量支持其他不属于 [deepseek-ai](https://github.com/deepseek-ai) 和 dsh 的下游项目，比如 [dsh-Go](https://github.com/ccch1mneyyy/dsh-Go) 等。
+>
+> 你可以报告与基于 dsh 开发的下游项目的兼容性问题，在插件功能可以同时兼容官方 dsh 和该项目时，维护者会进行改进。插件不会进行任何针对于其他项目的兼容性声明，如果插件可以正常工作，请忽略与此相关的任何提示或警告信息。
 
 ## 功能
 
@@ -23,9 +28,11 @@
 dsh plugin --profile web add github:Mooling0602/dsh-bili-danmaku-overlay
 ```
 
+通过图形化界面安装时，只需要输入 `github:Mooling0602/dsh-bili-danmaku-overlay` 并进行确认即可。
+
 安装完成后重启 dsh。包内自带 `cordis.patch.yml`，dsh 会自己把插件插入 bundle。也带有构建好的 JavaScript，所以安装过程不需要编译。
 
-之后打开插件设置页，把 `defaultRoom` 设成要监听的直播间号即可。
+之后点击小电视悬浮窗即可使用插件功能。打开插件配置页可以调整更多偏好设置。
 
 卸载：
 
@@ -35,7 +42,7 @@ dsh plugin --profile web remove dsh-bili-danmaku-overlay
 
 ## 配置登录凭据
 
-> [!NOTE]
+> [!WARNING]
 > 登录凭据保存在 dsh 宿主机上，而不是浏览器本地缓存。
 >
 > 确保你所使用的 dsh 实例只属于你自己，否则不建议使用本插件！
@@ -83,6 +90,9 @@ refs:
 
 配置页里的「前端设置」只保存在当前浏览器，不写入 dsh 配置，拖动滑块即时生效。
 
+> [!IMPORTANT]
+> 只支持在官方 dsh web 页面内，通过插件配置页中显示的控件进行调整。
+
 | 选项 | 范围 | 默认值 |
 | --- | --- | --- |
 | 悬浮球大小 | 32–96px | 48px |
@@ -95,10 +105,11 @@ refs:
 
 「前端设置」右上角的重置按钮会把悬浮球大小、窗口内缩放和弹幕窗口大小一起还原成默认值，没有改动时该按钮不可用。
 
-## 说明
+## 其他说明
 
-- 在线人数是真实观看人数，不是 B 站某些接口返回的人气值。
-- 鼠标移到窗口左上角的状态点上，可以看到未开播、连接失败、正在查看历史弹幕、已连接这些具体状态。
+- 直播间弹幕窗口标题栏上显示的数字是真实的实时观看人数。
+- 鼠标移到窗口左上角的状态点上，可以看到未开播、连接失败、正在查看历史弹幕、已连接、未连接这些具体状态；未开播的房间在展开弹幕后显示的是「未开播（正在查看弹幕）”。
+- 首次连接直播间后，如果不显示历史弹幕消息，可以尝试手动刷新。很久没开播并且没有新弹幕的直播间可能仍会显示「主播暂未开播」。
 
 ## 开发
 
@@ -111,6 +122,16 @@ npm run typecheck
 
 改完 `src/` 后重新构建。`client.js` 刷新页面即可生效；`index.js` 是 Host 侧，需要重启 `dsh`。
 
+在插件开始发布正式版本后，所有的 js 文件将从 git 仓库内移除，需要使用预构建或者允许本地编译（请自行处理）。
+
 ## 许可证
 
 MIT
+
+## 免责声明
+
+本插件使用的所有接口均为[哔哩哔哩视频网站](https://www.bilibili.com)的公开接口，不会收集和上传任何信息到任何额外的服务器地址。如果发现安全问题，请视情况在 [Issues](https://github.com/Mooling0602/dsh-bili-danmaku-overlay/issues) 或通过维护者个人 GitHub 主页的邮箱进行反馈。
+
+本插件**不会支持管理多个账号的凭据，以防止黑灰产滥用等情况**。在使用本插件的过程中，请妥善保存好你的个人凭据信息，如意外泄露请及时到账号后台退出登录异常设备。
+
+本插件提供的弹幕信息发送功能仅设计为供人类用户通过操作前端图形界面的方式使用。通过外接其他插件或外部软件、修改源代码或载入自定义代码等方式滥用此功能的行为，应由使用者自负后果，维护者对此不承担任何责任。
