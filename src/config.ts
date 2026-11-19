@@ -47,8 +47,20 @@ export const DEFAULT_KEEPALIVE_MS = 15_000
 /** Request timeout for outbound Bilibili calls, in milliseconds. */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 12_000
 
-/** Hard ceiling for one outgoing danmaku, in characters. Enforced by Bilibili. */
-export const MAX_DANMAKU_CHARS = 20
+/**
+ * Ceiling for one outgoing danmaku, in characters.
+ *
+ * Bilibili decides the real ceiling per account: a viewer who has reached live
+ * user level 20 may send 30 characters where an ordinary account may send 20, and
+ * the send endpoint answers `1003212` when the message is over the caller's own
+ * limit. A single number here can therefore only be a floor for the permissive
+ * accounts or a wall for the restrictive ones, and it cannot be both. This value
+ * is the permissive end, so an entitled account is not refused by the plugin
+ * before Bilibili has seen the message; the endpoint remains the authority and its
+ * rejection is reported. Keep it in step with {@link MAX_CLIENT_DANMAKU_CHARS} in
+ * `src/client/api.ts`, which caps the same input in the browser.
+ */
+export const MAX_DANMAKU_CHARS = 30
 
 /** Environment fallbacks, in the order the credential reader tries them. */
 export const SESSDATA_REF = 'BILIBILI_SESSDATA'

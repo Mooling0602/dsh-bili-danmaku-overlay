@@ -96,6 +96,7 @@ window.__ModuleLoader__.load({
       var MIN_UI_SCALE = 50;
       var MAX_UI_SCALE = 300;
       var COMFORTABLE_UI_SCALE_MAX = 150;
+      var MAX_CLIENT_DANMAKU_CHARS = 30;
       var COMFORTABLE_UI_SCALE_MIN = 80;
       function clampScale(value) {
         const scale = Number(value);
@@ -3215,12 +3216,12 @@ window.__ModuleLoader__.load({
                       "input",
                       {
                         value: reply,
-                        onChange: (event) => setReply(event.target.value.slice(0, 20)),
+                        onChange: (event) => setReply(event.target.value.slice(0, MAX_CLIENT_DANMAKU_CHARS)),
                         onKeyDown: (event) => {
                           if (event.key === "Enter") void submit();
                         },
                         placeholder: veiled ? t("offlinePlaceholder") : props.canReply ? t("sendPlaceholder") : props.replyReason || t("sendPlaceholder"),
-                        maxLength: 20,
+                        maxLength: MAX_CLIENT_DANMAKU_CHARS,
                         disabled: veiled || !props.canReply,
                         style: {
                           flex: "1 1 auto",

@@ -23,6 +23,7 @@ import type { CopyKey } from './copy.ts'
 import {
   clampLength,
   colorOf,
+  MAX_CLIENT_DANMAKU_CHARS,
   MAX_WINDOW_HEIGHT,
   MAX_WINDOW_WIDTH,
   MIN_WINDOW_HEIGHT,
@@ -906,7 +907,7 @@ export function DanmakuWindow(props: WindowProps) {
       >
         <input
           value={reply}
-          onChange={(event) => setReply(event.target.value.slice(0, 20))}
+          onChange={(event) => setReply(event.target.value.slice(0, MAX_CLIENT_DANMAKU_CHARS))}
           onKeyDown={(event) => {
             if (event.key === 'Enter') void submit()
           }}
@@ -917,7 +918,7 @@ export function DanmakuWindow(props: WindowProps) {
                 ? t('sendPlaceholder')
                 : (props.replyReason || t('sendPlaceholder'))
           }
-          maxLength={20}
+          maxLength={MAX_CLIENT_DANMAKU_CHARS}
           disabled={veiled || !props.canReply}
           style={{
             flex: '1 1 auto',

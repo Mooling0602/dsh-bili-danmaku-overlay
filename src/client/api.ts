@@ -273,6 +273,17 @@ export const MAX_UI_SCALE = 300
 /** Above this zoom the settings page warns that rows become tall and rare. */
 export const COMFORTABLE_UI_SCALE_MAX = 150
 
+/**
+ * Characters the reply input accepts before it stops taking more.
+ *
+ * Bilibili sets the real limit per account and rejects an over long message with
+ * `1003212`, so this is a draft stop and not the authority. It matches the Host's
+ * `MAX_DANMAKU_CHARS` so the box does not let through more than the Host will
+ * forward, which would turn a typing mistake into a rejection instead of a
+ * character count.
+ */
+export const MAX_CLIENT_DANMAKU_CHARS = 30
+
 /** Below this zoom the settings page warns that text becomes hard to read. */
 export const COMFORTABLE_UI_SCALE_MIN = 80
 

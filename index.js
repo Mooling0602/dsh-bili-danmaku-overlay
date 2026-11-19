@@ -2228,7 +2228,7 @@ var DEFAULT_POLL_MIN_MS = 100;
 var DEFAULT_STATS_INTERVAL_MS = 6e4;
 var DEFAULT_HEARTBEAT_MS = 3e4;
 var DEFAULT_REQUEST_TIMEOUT_MS = 12e3;
-var MAX_DANMAKU_CHARS = 20;
+var MAX_DANMAKU_CHARS = 30;
 var SESSDATA_REF = "BILIBILI_SESSDATA";
 var CSRF_REF = "BILIBILI_JCT";
 var Config = Schema.object({
@@ -2848,7 +2848,8 @@ async function sendDanmaku(roomInput, text, timeoutMs = 12e3, preferCustomCreden
       "-400": "弹幕内容不合法",
       "-403": "你被禁言或该房间限制发言",
       "10030": "该房间开启了等级或粉丝勋章限制",
-      "10031": "发送过于频繁，请稍后再试"
+      "10031": "发送过于频繁，请稍后再试",
+      "1003212": `弹幕超出你账号的字数上限（插件允许 ${MAX_DANMAKU_CHARS} 字，Bilibili 按账号等级另行判断）`
     };
     const reason = known[String(code)] ?? String(payload.message || payload.msg || `发送失败（${code}）`);
     throw new BiliError(reason, code);
