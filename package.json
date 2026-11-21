@@ -1,7 +1,7 @@
 {
   "name": "dsh-bili-danmaku-overlay",
   "version": "1.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "description": "Bilibili live danmaku as an always-visible overlay in the DSH Web UI.",
   "license": "MIT",
